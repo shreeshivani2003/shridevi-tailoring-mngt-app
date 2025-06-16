@@ -21,12 +21,17 @@ export interface Customer {
 
 export type MaterialType = 'blouse' | 'chudi' | 'saree' | 'works' | 'others';
 
+export type OrderType = 'regular' | 'emergency';
+
 export interface Order {
   id: string;
   orderId: string;
   customerId: string;
   customerName: string;
+  orderType: OrderType;
   materialType: MaterialType;
+  sizeBookNo: string;
+  hint: string;
   description: string;
   sizes: SizeChart;
   referenceImage?: string;

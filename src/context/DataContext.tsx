@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
-import { Customer, Order, MaterialType, materialStages } from '../types';
+import { Customer, Order, MaterialType, OrderType, materialStages } from '../types';
 
 interface DataContextType {
   customers: Customer[];
@@ -51,7 +51,10 @@ const mockOrders: Order[] = [
     orderId: 'ORD001',
     customerId: '1',
     customerName: 'Priya Sharma',
+    orderType: 'regular',
     materialType: 'blouse',
+    sizeBookNo: 'SB001',
+    hint: 'Regular blouse order',
     description: 'Silk blouse with embroidery',
     sizes: { chest: '36', waist: '32', armLength: '15' },
     notes: 'Gold thread work required',
@@ -71,7 +74,10 @@ const mockOrders: Order[] = [
     orderId: 'ORD002',
     customerId: '2',
     customerName: 'Meera Rajesh',
+    orderType: 'emergency',
     materialType: 'chudi',
+    sizeBookNo: 'SB002',
+    hint: 'Emergency chudi order',
     description: 'Cotton chudi set',
     sizes: { chest: '38', waist: '34', kurti: '42' },
     notes: 'Simple design preferred',
@@ -86,15 +92,81 @@ const mockOrders: Order[] = [
 ];
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [customers, setCustomers] = useState<Customer[]>([
+    {
+      id: '1',
+      customerId: 'CUST001',
+      name: 'Sample Customer',
+      phone: '1234567890',
+      whatsappNumber: '1234567890',
+      whatsappEnabled: true,
+      address: 'Sample Address',
+      notes: 'Sample Notes',
+      createdAt: new Date(),
+      orders: []
+    }
+  ]);
+
+  const [orders, setOrders] = useState<Order[]>([
+    {
+      id: '1',
+      orderId: 'ORD001',
+      customerId: '1',
+      customerName: 'Sample Customer',
+      orderType: 'regular',
+      materialType: 'blouse',
+      sizeBookNo: 'SB001',
+      hint: 'Sample Hint',
+      description: 'Sample Blouse Order',
+      sizes: { chest: '36', waist: '28', armLength: '24' },
+      notes: 'Sample Notes',
+      deliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      givenDate: new Date(),
+      approximateAmount: 1000,
+      currentStatus: 'Order Received',
+      statusHistory: [{
+        stage: 'Order Received',
+        completedAt: new Date(),
+        notes: 'Order created'
+      }],
+      isDelivered: false,
+      createdAt: new Date()
+    },
+    {
+      id: '2',
+      orderId: 'EMG001',
+      customerId: '1',
+      customerName: 'Sample Customer',
+      orderType: 'emergency',
+      materialType: 'chudi',
+      sizeBookNo: 'SB002',
+      hint: 'Emergency Order',
+      description: 'Sample Emergency Chudi Order',
+      sizes: { chest: '38', waist: '30', kurti: '42' },
+      notes: 'Emergency Notes',
+      deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      givenDate: new Date(),
+      approximateAmount: 1500,
+      currentStatus: 'Order Received',
+      statusHistory: [{
+        stage: 'Order Received',
+        completedAt: new Date(),
+        notes: 'Emergency order created'
+      }],
+      isDelivered: false,
+      createdAt: new Date()
+    }
+  ]);
 
   const generateCustomerId = () => {
     return `CUST${String(customers.length + 1).padStart(3, '0')}`;
   };
 
-  const generateOrderId = () => {
-    return `ORD${String(orders.length + 1).padStart(3, '0')}`;
+  const generateOrderId = (orderType: OrderType) => {
+    const prefix = orderType === 'regular' ? 'ORD' : 'EMG';
+    const timestamp = Date.now().toString().slice(-6);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${prefix}${timestamp}${random}`;
   };
 
   const addCustomer = (customerData: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => {
@@ -120,15 +192,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addOrder = (orderData: Omit<Order, 'id' | 'orderId' | 'createdAt' | 'currentStatus' | 'statusHistory' | 'isDelivered'>) => {
+    const initialStatus = 'Order Received';
     const newOrder: Order = {
       ...orderData,
       id: Date.now().toString(),
-      orderId: generateOrderId(),
-      currentStatus: materialStages[orderData.materialType][0],
-      statusHistory: [],
-      isDelivered: false,
-      createdAt: new Date()
+      orderId: generateOrderId(orderData.orderType),
+      createdAt: new Date(),
+      currentStatus: initialStatus,
+      statusHistory: [{
+        stage: initialStatus,
+        completedAt: new Date(),
+        notes: 'Order created'
+      }],
+      isDelivered: false
     };
+
     setOrders(prev => [...prev, newOrder]);
   };
 
@@ -168,7 +246,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       order.orderId.toLowerCase().includes(lowercaseQuery) ||
       order.customerName.toLowerCase().includes(lowercaseQuery) ||
       order.materialType.toLowerCase().includes(lowercaseQuery) ||
-      order.description.toLowerCase().includes(lowercaseQuery)
+      order.description.toLowerCase().includes(lowercaseQuery) ||
+      order.sizeBookNo.toLowerCase().includes(lowercaseQuery) ||
+      order.hint.toLowerCase().includes(lowercaseQuery)
     );
   };
 
