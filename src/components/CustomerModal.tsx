@@ -19,9 +19,11 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
     whatsappNumber: '',
     whatsappEnabled: false,
     address: '',
-    notes: ''
+    notes: '',
+    customerId: ''
   });
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (customer && (mode === 'edit' || mode === 'view')) {
@@ -31,7 +33,8 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
         whatsappNumber: customer.whatsappNumber || '',
         whatsappEnabled: customer.whatsappEnabled,
         address: customer.address || '',
-        notes: customer.notes || ''
+        notes: customer.notes || '',
+        customerId: customer.customerId
       });
     } else {
       setFormData({
@@ -40,21 +43,43 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
         whatsappNumber: '',
         whatsappEnabled: false,
         address: '',
-        notes: ''
+        notes: '',
+        customerId: ''
       });
     }
   }, [customer, mode, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (mode === 'add') {
-      addCustomer(formData);
-    } else if (mode === 'edit' && customer) {
-      updateCustomer(customer.id, formData);
-    }
+    console.log('Submitting customer form:', { mode, formData });
     
-    onClose();
+    try {
+      setIsSubmitting(true);
+      
+      if (mode === 'add') {
+        console.log('Adding customer...');
+        await addCustomer(formData);
+        console.log('Customer added successfully');
+        alert('Customer added successfully!');
+      } else if (mode === 'edit' && customer) {
+        console.log('Updating customer...');
+        await updateCustomer(customer.id, formData);
+        console.log('Customer updated successfully');
+        alert('Customer updated successfully!');
+      }
+      
+      onClose();
+    } catch (error) {
+      console.error('Error saving customer:', error);
+      if (error instanceof Error && error.message.includes('Supabase not configured')) {
+        alert('Database not configured. Please set up Supabase environment variables.');
+      } else {
+        alert('Failed to save customer. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAddOrder = () => {
@@ -254,9 +279,17 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
                 {!isViewMode && (
                   <button
                     type="submit"
-                    className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-6 py-3 rounded-lg font-medium hover:from-pink-600 hover:to-rose-600 transition-all transform hover:scale-105"
+                    disabled={isSubmitting}
+                    className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-6 py-3 rounded-lg font-medium hover:from-pink-600 hover:to-rose-600 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    {mode === 'add' ? 'Add Customer' : 'Update Customer'}
+                    {isSubmitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        {mode === 'add' ? 'Adding...' : 'Updating...'}
+                      </>
+                    ) : (
+                      mode === 'add' ? 'Add Customer' : 'Update Customer'
+                    )}
                   </button>
                 )}
               </div>

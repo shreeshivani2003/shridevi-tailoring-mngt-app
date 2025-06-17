@@ -40,9 +40,14 @@ const Customers: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDeleteCustomer = (customerId: string) => {
+  const handleDeleteCustomer = async (customerId: string) => {
     if (window.confirm('Are you sure you want to delete this customer?')) {
-      deleteCustomer(customerId);
+      try {
+        await deleteCustomer(customerId);
+      } catch (error) {
+        console.error('Error deleting customer:', error);
+        alert('Failed to delete customer. Please try again.');
+      }
     }
   };
 
