@@ -1,91 +1,139 @@
 # Supabase Setup Guide
 
-This guide will help you set up Supabase for the Shri Devi Tailoring Management App.
-
-## Prerequisites
-
-1. A Supabase account (sign up at https://supabase.com)
-2. Node.js and npm installed on your machine
-
 ## Step 1: Create a Supabase Project
 
-1. Go to https://supabase.com and sign in
-2. Click "New Project"
-3. Choose your organization
-4. Enter a project name (e.g., "shri-devi-tailoring")
-5. Enter a database password (save this securely)
-6. Choose a region close to your users
-7. Click "Create new project"
+1. Go to [https://supabase.com](https://supabase.com)
+2. Sign up or log in to your account
+3. Click "New Project"
+4. Choose your organization
+5. Enter a project name (e.g., "mom-tailoring")
+6. Enter a database password (save this!)
+7. Choose a region close to you
+8. Click "Create new project"
 
 ## Step 2: Get Your Project Credentials
 
-1. In your Supabase dashboard, go to Settings > API
+1. In your Supabase dashboard, go to **Settings** → **API**
 2. Copy the following values:
-   - Project URL
-   - Anon (public) key
+   - **Project URL** (looks like: `https://abcdefghijklmnop.supabase.co`)
+   - **anon public** key (starts with `eyJ...`)
 
-## Step 3: Set Up Environment Variables
+## Step 3: Create Environment Variables
 
-1. Create a `.env` file in your project root
-2. Add the following variables:
+1. In your project root directory, create a file called `.env`
+2. Add the following content (replace with your actual values):
 
 ```env
-VITE_SUPABASE_URL=your_project_url_here
-VITE_SUPABASE_ANON_KEY=your_anon_key_here
+VITE_SUPABASE_URL=https://your-actual-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=your-actual-anon-key-here
 ```
 
-Replace `your_project_url_here` and `your_anon_key_here` with the values from Step 2.
+**Example:**
+```env
+VITE_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprbG1ub3AiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYzNDU2Nzg5MCwiZXhwIjoxOTUwMTQzODkwfQ.example
+```
 
 ## Step 4: Set Up Database Tables
 
-1. In your Supabase dashboard, go to SQL Editor
-2. Copy the contents of `supabase-schema.sql`
-3. Paste it into the SQL Editor
-4. Click "Run" to execute the script
+1. In your Supabase dashboard, go to **SQL Editor**
+2. Copy and paste the following SQL code:
 
-This will create:
-- `customers` table for storing customer information
-- `orders` table for storing order details
-- `users` table for authentication
-- Default users (superadmin, admin, user)
-- Appropriate indexes for performance
-- Row Level Security policies
+```sql
+-- Create customers table
+CREATE TABLE customers (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  whatsapp_number TEXT,
+  whatsapp_enabled BOOLEAN DEFAULT false,
+  address TEXT,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-## Step 5: Test the Integration
+-- Create orders table
+CREATE TABLE orders (
+  id TEXT PRIMARY KEY,
+  order_id TEXT UNIQUE NOT NULL,
+  customer_id TEXT REFERENCES customers(id) ON DELETE CASCADE,
+  customer_name TEXT NOT NULL,
+  material_type TEXT NOT NULL,
+  description TEXT,
+  order_type TEXT NOT NULL,
+  given_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  delivery_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  current_status TEXT NOT NULL,
+  status_history JSONB DEFAULT '[]',
+  is_delivered BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-1. Start your development server:
+-- Create indexes for better performance
+CREATE INDEX idx_customers_phone ON customers(phone);
+CREATE INDEX idx_orders_customer_id ON orders(customer_id);
+CREATE INDEX idx_orders_delivery_date ON orders(delivery_date);
+CREATE INDEX idx_orders_status ON orders(current_status);
+```
+
+3. Click "Run" to execute the SQL
+
+## Step 5: Set Up Row Level Security (RLS)
+
+1. In your Supabase dashboard, go to **Authentication** → **Policies**
+2. For the `customers` table:
+   - Click "New Policy"
+   - Choose "Enable read access to everyone"
+   - Click "Review" and "Save"
+   - Click "New Policy" again
+   - Choose "Enable insert access to everyone"
+   - Click "Review" and "Save"
+   - Click "New Policy" again
+   - Choose "Enable update access to everyone"
+   - Click "Review" and "Save"
+   - Click "New Policy" again
+   - Choose "Enable delete access to everyone"
+   - Click "Review" and "Save"
+
+3. Repeat the same process for the `orders` table
+
+## Step 6: Test Your Setup
+
+1. Restart your development server:
    ```bash
    npm run dev
    ```
 
-2. Try creating a new customer or order
-3. Check your Supabase dashboard > Table Editor to see if the data is being saved
+2. Open your app in the browser
+3. Try adding a customer - it should work now!
 
 ## Troubleshooting
 
-### Orders not saving?
+### If you see "Database not configured" error:
+- Make sure your `.env` file exists in the project root
+- Check that the environment variable names are exactly: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+- Verify that your Supabase URL and key are correct
+- Restart your development server after creating the `.env` file
 
-1. Check your browser's developer console for errors
-2. Verify your environment variables are correct
-3. Ensure the database tables were created successfully
-4. Check if Row Level Security policies are properly configured
+### If you see "permission denied" errors:
+- Make sure you've set up Row Level Security policies as described in Step 5
+- Check that your anon key is correct
 
-### Common Issues
-
-1. **CORS errors**: Make sure your Supabase project allows requests from your domain
-2. **Authentication errors**: Check if your API keys are correct
-3. **Database errors**: Verify the table schema matches the expected structure
+### If tables don't exist:
+- Make sure you've run the SQL commands from Step 4
+- Check the SQL Editor for any error messages
 
 ## Security Notes
 
-- The current setup allows public access to all tables for simplicity
-- For production, you should implement proper authentication and authorization
-- Consider using Supabase Auth for user management
-- Review and modify the RLS policies based on your security requirements
+- The `.env` file should never be committed to git (it's already in `.gitignore`)
+- The anon key is safe to use in the frontend - it has limited permissions
+- For production, consider setting up proper authentication
 
-## Support
+## Need Help?
 
-If you encounter issues:
-1. Check the Supabase documentation: https://supabase.com/docs
-2. Review the browser console for error messages
-3. Check the Supabase dashboard logs 
+If you're still having issues:
+1. Check the browser console for error messages
+2. Verify your Supabase project is active
+3. Make sure you're using the correct region
+4. Try creating a new Supabase project if needed 
