@@ -73,7 +73,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
     } catch (error) {
       console.error('Error saving customer:', error);
       if (error instanceof Error && error.message.includes('Supabase not configured')) {
-        alert('Database not configured. Please set up Supabase environment variables.');
+        alert('Database not configured. Please create a .env file with your Supabase credentials:\n\nVITE_SUPABASE_URL=your_supabase_url\nVITE_SUPABASE_ANON_KEY=your_supabase_anon_key\n\nCheck SUPABASE_SETUP.md for detailed instructions.');
       } else {
         alert('Failed to save customer. Please try again.');
       }

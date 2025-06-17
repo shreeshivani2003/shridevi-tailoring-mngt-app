@@ -20,8 +20,21 @@ const createMockClient = () => {
   };
 };
 
+// Check if environment variables are properly configured
+const isSupabaseConfigured = supabaseUrl && 
+  supabaseAnonKey && 
+  supabaseUrl !== 'https://your-project.supabase.co' &&
+  supabaseUrl !== '';
+
 // For development, if no environment variables are set, use mock client
 // In production, you should always have these variables set
-export const supabase = supabaseUrl && supabaseAnonKey && supabaseUrl !== 'https://your-project.supabase.co'
+export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
-  : createMockClient(); 
+  : createMockClient();
+
+// Export configuration status for debugging
+export const supabaseConfig = {
+  isConfigured: isSupabaseConfigured,
+  url: supabaseUrl,
+  hasKey: !!supabaseAnonKey
+}; 

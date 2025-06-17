@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Customer, Order, MaterialType, OrderType, materialStages } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseConfig } from '../lib/supabase';
 
 interface DataContextType {
   customers: Customer[];
@@ -54,6 +54,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       
+      // Check if Supabase is configured
+      if (!supabaseConfig.isConfigured) {
+        // Load from localStorage as fallback
+        const storedCustomers = localStorage.getItem('customers');
+        const storedOrders = localStorage.getItem('orders');
+        
+        if (storedCustomers) {
+          const customersData = JSON.parse(storedCustomers);
+          setCustomers(customersData.map((c: any) => ({
+            ...c,
+            createdAt: new Date(c.createdAt)
+          })));
+        }
+        
+        if (storedOrders) {
+          const ordersData = JSON.parse(storedOrders);
+          setOrders(ordersData.map((o: any) => ({
+            ...o,
+            createdAt: new Date(o.createdAt),
+            deliveryDate: new Date(o.deliveryDate),
+            givenDate: new Date(o.givenDate)
+          })));
+        }
+        
+        setSupabaseConfigured(false);
+        return;
+      }
+      
       // Load customers
       const { data: customersData, error: customersError } = await supabase
         .from('customers')
@@ -68,7 +96,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If Supabase is not configured, use empty array
         setCustomers([]);
       } else {
-        setCustomers(customersData || []);
+        // Map Supabase data to our app format
+        const mappedCustomers = (customersData || []).map((customer: any) => ({
+          id: customer.id,
+          customerId: customer.customer_id,
+          name: customer.name,
+          phone: customer.phone,
+          whatsappNumber: customer.whatsapp_number,
+          whatsappEnabled: customer.whatsapp_enabled,
+          address: customer.address,
+          notes: customer.notes,
+          createdAt: new Date(customer.created_at),
+          orders: []
+        }));
+        setCustomers(mappedCustomers);
       }
 
       // Load orders
@@ -85,7 +126,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If Supabase is not configured, use empty array
         setOrders([]);
       } else {
-        setOrders(ordersData || []);
+        // Map Supabase data to our app format
+        const mappedOrders = (ordersData || []).map((order: any) => ({
+          id: order.id,
+          orderId: order.order_id,
+          customerId: order.customer_id,
+          customerName: order.customer_name,
+          materialType: order.material_type,
+          description: order.description,
+          orderType: order.order_type,
+          givenDate: new Date(order.given_date),
+          deliveryDate: new Date(order.delivery_date),
+          currentStatus: order.current_status,
+          statusHistory: order.status_history || [],
+          isDelivered: order.is_delivered,
+          createdAt: new Date(order.created_at),
+          sizes: order.sizes || {},
+          referenceImage: order.reference_image,
+          notes: order.notes,
+          approximateAmount: order.approximate_amount || 0,
+          sizeBookNo: order.size_book_no,
+          hint: order.hint
+        }));
+        setOrders(mappedOrders);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -99,17 +162,40 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addCustomer = async (customerData: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => {
     try {
-      const newCustomer = {
+      const newCustomer: Customer = {
         ...customerData,
         id: Date.now().toString(),
         customerId: generateCustomerId(),
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(),
         orders: []
+      };
+
+      // Check if Supabase is configured
+      if (!supabaseConfig.isConfigured) {
+        // Fallback to localStorage for development
+        const existingCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
+        const updatedCustomers = [newCustomer, ...existingCustomers];
+        localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+        setCustomers(prev => [newCustomer, ...prev]);
+        return;
+      }
+
+      // Map to Supabase schema (snake_case)
+      const supabaseCustomer = {
+        id: newCustomer.id,
+        customer_id: newCustomer.customerId,
+        name: newCustomer.name,
+        phone: newCustomer.phone,
+        whatsapp_number: newCustomer.whatsappNumber || null,
+        whatsapp_enabled: newCustomer.whatsappEnabled,
+        address: newCustomer.address || null,
+        notes: newCustomer.notes || null,
+        created_at: newCustomer.createdAt.toISOString()
       };
 
       const { data, error } = await supabase
         .from('customers')
-        .insert([newCustomer])
+        .insert([supabaseCustomer])
         .select()
         .single();
 
@@ -118,9 +204,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
-      setCustomers(prev => [data, ...prev]);
+      // Map back to our app's format
+      const mappedCustomer: Customer = {
+        id: data.id,
+        customerId: data.customer_id,
+        name: data.name,
+        phone: data.phone,
+        whatsappNumber: data.whatsapp_number,
+        whatsappEnabled: data.whatsapp_enabled,
+        address: data.address,
+        notes: data.notes,
+        createdAt: new Date(data.created_at),
+        orders: []
+      };
+
+      setCustomers(prev => [mappedCustomer, ...prev]);
     } catch (error) {
       console.error('Error adding customer:', error);
+      
+      // If Supabase fails, try localStorage fallback
+      if (error instanceof Error && error.message.includes('Supabase not configured')) {
+        const newCustomer: Customer = {
+          ...customerData,
+          id: Date.now().toString(),
+          customerId: generateCustomerId(),
+          createdAt: new Date(),
+          orders: []
+        };
+        
+        const existingCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
+        const updatedCustomers = [newCustomer, ...existingCustomers];
+        localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+        setCustomers(prev => [newCustomer, ...prev]);
+        return;
+      }
+      
       throw error;
     }
   };
