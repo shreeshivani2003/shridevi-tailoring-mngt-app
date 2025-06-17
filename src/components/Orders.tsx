@@ -17,12 +17,13 @@ import {
 import OrderModal from './OrderModal';
 
 const Orders: React.FC = () => {
-  const { orders, customers, searchOrders, deleteOrder } = useData();
+  const { orders, customers, searchOrders, deleteOrder, loading } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'edit' | 'view' | 'add'>('view');
   const [activeTab, setActiveTab] = useState<'regular' | 'emergency'>('regular');
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   const filteredOrders = searchOrders(searchQuery);
   
@@ -68,9 +69,17 @@ const Orders: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDeleteOrder = (orderId: string) => {
+  const handleDeleteOrder = async (orderId: string) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
-      deleteOrder(orderId);
+      try {
+        setDeletingOrderId(orderId);
+        await deleteOrder(orderId);
+      } catch (error) {
+        console.error('Error deleting order:', error);
+        alert('Failed to delete order. Please try again.');
+      } finally {
+        setDeletingOrderId(null);
+      }
     }
   };
 
@@ -99,6 +108,17 @@ const Orders: React.FC = () => {
   };
 
   const groupedOrders = getGroupedOrders(activeTab);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading orders...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -175,6 +195,8 @@ const Orders: React.FC = () => {
               <div className="space-y-4">
                 {groupOrders.map(order => {
                   const customer = getCustomerById(order.customerId);
+                  const isDeleting = deletingOrderId === order.id;
+                  
                   return (
                     <div key={order.id} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
                       <div className="flex items-center justify-between">
@@ -235,10 +257,19 @@ const Orders: React.FC = () => {
                           </button>
                           <button
                             onClick={() => handleDeleteOrder(order.id)}
-                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            disabled={isDeleting}
+                            className={`p-2 rounded-lg transition-colors ${
+                              isDeleting 
+                                ? 'text-gray-400 cursor-not-allowed' 
+                                : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
+                            }`}
                             title="Delete Order"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            {isDeleting ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500"></div>
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </div>

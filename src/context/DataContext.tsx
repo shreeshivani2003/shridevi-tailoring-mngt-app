@@ -1,242 +1,288 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Customer, Order, MaterialType, OrderType, materialStages } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface DataContextType {
   customers: Customer[];
   orders: Order[];
-  addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => void;
-  updateCustomer: (id: string, customer: Partial<Customer>) => void;
-  deleteCustomer: (id: string) => void;
-  addOrder: (order: Omit<Order, 'id' | 'orderId' | 'createdAt' | 'currentStatus' | 'statusHistory' | 'isDelivered'>) => void;
-  updateOrder: (id: string, order: Partial<Order>) => void;
-  deleteOrder: (id: string) => void;
-  updateOrderStatus: (orderId: string, newStatus: string, notes?: string) => void;
+  addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => Promise<void>;
+  updateCustomer: (id: string, customer: Partial<Customer>) => Promise<void>;
+  deleteCustomer: (id: string) => Promise<void>;
+  addOrder: (order: Omit<Order, 'id' | 'orderId' | 'createdAt' | 'currentStatus' | 'statusHistory' | 'isDelivered'>) => Promise<void>;
+  updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
+  deleteOrder: (id: string) => Promise<void>;
+  updateOrderStatus: (orderId: string, newStatus: string, notes?: string) => Promise<void>;
   searchOrders: (query: string) => Order[];
   searchCustomers: (query: string) => Customer[];
+  loading: boolean;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// Mock data
-const mockCustomers: Customer[] = [
-  {
-    id: '1',
-    name: 'Priya Sharma',
-    customerId: 'CUST001',
-    phone: '9876543210',
-    whatsappNumber: '9876543210',
-    whatsappEnabled: true,
-    address: '123 Main Street, Chennai',
-    notes: 'Regular customer',
-    createdAt: new Date(),
-    orders: []
-  },
-  {
-    id: '2',
-    name: 'Meera Rajesh',
-    customerId: 'CUST002',
-    phone: '9876543211',
-    whatsappNumber: '9876543211',
-    whatsappEnabled: true,
-    address: '456 Oak Avenue, Chennai',
-    notes: 'Prefers traditional designs',
-    createdAt: new Date(),
-    orders: []
+export const useData = () => {
+  const context = useContext(DataContext);
+  if (!context) {
+    throw new Error('useData must be used within a DataProvider');
   }
-];
+  return context;
+};
 
-const mockOrders: Order[] = [
-  {
-    id: '1',
-    orderId: 'ORD001',
-    customerId: '1',
-    customerName: 'Priya Sharma',
-    orderType: 'regular',
-    materialType: 'blouse',
-    sizeBookNo: 'SB001',
-    hint: 'Regular blouse order',
-    description: 'Silk blouse with embroidery',
-    sizes: { chest: '36', waist: '32', armLength: '15' },
-    notes: 'Gold thread work required',
-    deliveryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
-    givenDate: new Date(),
-    approximateAmount: 1500,
-    currentStatus: 'Stitching',
-    statusHistory: [
-      { stage: 'Checking', completedAt: new Date(), notes: 'Measurements verified' },
-      { stage: 'Cutting', completedAt: new Date(), notes: 'Fabric cut as per design' }
-    ],
-    isDelivered: false,
-    createdAt: new Date()
-  },
-  {
-    id: '2',
-    orderId: 'ORD002',
-    customerId: '2',
-    customerName: 'Meera Rajesh',
-    orderType: 'emergency',
-    materialType: 'chudi',
-    sizeBookNo: 'SB002',
-    hint: 'Emergency chudi order',
-    description: 'Cotton chudi set',
-    sizes: { chest: '38', waist: '34', kurti: '42' },
-    notes: 'Simple design preferred',
-    deliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    givenDate: new Date(),
-    approximateAmount: 800,
-    currentStatus: 'Checking',
-    statusHistory: [],
-    isDelivered: false,
-    createdAt: new Date()
-  }
-];
+const generateCustomerId = () => {
+  return `CUST${String(Date.now()).slice(-6)}`;
+};
+
+const generateOrderId = (orderType: OrderType) => {
+  const prefix = orderType === 'regular' ? 'ORD' : 'EMG';
+  const timestamp = Date.now().toString().slice(-6);
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `${prefix}${timestamp}${random}`;
+};
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [customers, setCustomers] = useState<Customer[]>([
-    {
-      id: '1',
-      customerId: 'CUST001',
-      name: 'Sample Customer',
-      phone: '1234567890',
-      whatsappNumber: '1234567890',
-      whatsappEnabled: true,
-      address: 'Sample Address',
-      notes: 'Sample Notes',
-      createdAt: new Date(),
-      orders: []
-    }
-  ]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [orders, setOrders] = useState<Order[]>([
-    {
-      id: '1',
-      orderId: 'ORD001',
-      customerId: '1',
-      customerName: 'Sample Customer',
-      orderType: 'regular',
-      materialType: 'blouse',
-      sizeBookNo: 'SB001',
-      hint: 'Sample Hint',
-      description: 'Sample Blouse Order',
-      sizes: { chest: '36', waist: '28', armLength: '24' },
-      notes: 'Sample Notes',
-      deliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      givenDate: new Date(),
-      approximateAmount: 1000,
-      currentStatus: 'Order Received',
-      statusHistory: [{
-        stage: 'Order Received',
-        completedAt: new Date(),
-        notes: 'Order created'
-      }],
-      isDelivered: false,
-      createdAt: new Date()
-    },
-    {
-      id: '2',
-      orderId: 'EMG001',
-      customerId: '1',
-      customerName: 'Sample Customer',
-      orderType: 'emergency',
-      materialType: 'chudi',
-      sizeBookNo: 'SB002',
-      hint: 'Emergency Order',
-      description: 'Sample Emergency Chudi Order',
-      sizes: { chest: '38', waist: '30', kurti: '42' },
-      notes: 'Emergency Notes',
-      deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      givenDate: new Date(),
-      approximateAmount: 1500,
-      currentStatus: 'Order Received',
-      statusHistory: [{
-        stage: 'Order Received',
-        completedAt: new Date(),
-        notes: 'Emergency order created'
-      }],
-      isDelivered: false,
-      createdAt: new Date()
-    }
-  ]);
+  // Load initial data from Supabase
+  useEffect(() => {
+    loadData();
+  }, []);
 
-  const generateCustomerId = () => {
-    return `CUST${String(customers.length + 1).padStart(3, '0')}`;
-  };
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load customers
+      const { data: customersData, error: customersError } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  const generateOrderId = (orderType: OrderType) => {
-    const prefix = orderType === 'regular' ? 'ORD' : 'EMG';
-    const timestamp = Date.now().toString().slice(-6);
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    return `${prefix}${timestamp}${random}`;
-  };
-
-  const addCustomer = (customerData: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => {
-    const newCustomer: Customer = {
-      ...customerData,
-      id: Date.now().toString(),
-      customerId: generateCustomerId(),
-      createdAt: new Date(),
-      orders: []
-    };
-    setCustomers(prev => [...prev, newCustomer]);
-  };
-
-  const updateCustomer = (id: string, customerData: Partial<Customer>) => {
-    setCustomers(prev => prev.map(customer => 
-      customer.id === id ? { ...customer, ...customerData } : customer
-    ));
-  };
-
-  const deleteCustomer = (id: string) => {
-    setCustomers(prev => prev.filter(customer => customer.id !== id));
-    setOrders(prev => prev.filter(order => order.customerId !== id));
-  };
-
-  const addOrder = (orderData: Omit<Order, 'id' | 'orderId' | 'createdAt' | 'currentStatus' | 'statusHistory' | 'isDelivered'>) => {
-    const initialStatus = 'Order Received';
-    const newOrder: Order = {
-      ...orderData,
-      id: Date.now().toString(),
-      orderId: generateOrderId(orderData.orderType),
-      createdAt: new Date(),
-      currentStatus: initialStatus,
-      statusHistory: [{
-        stage: initialStatus,
-        completedAt: new Date(),
-        notes: 'Order created'
-      }],
-      isDelivered: false
-    };
-
-    setOrders(prev => [...prev, newOrder]);
-  };
-
-  const updateOrder = (id: string, orderData: Partial<Order>) => {
-    setOrders(prev => prev.map(order => 
-      order.id === id ? { ...order, ...orderData } : order
-    ));
-  };
-
-  const deleteOrder = (id: string) => {
-    setOrders(prev => prev.filter(order => order.id !== id));
-  };
-
-  const updateOrderStatus = (orderId: string, newStatus: string, notes?: string) => {
-    setOrders(prev => prev.map(order => {
-      if (order.orderId === orderId) {
-        const newStatusHistory = [...order.statusHistory, {
-          stage: newStatus,
-          completedAt: new Date(),
-          notes
-        }];
-        return {
-          ...order,
-          currentStatus: newStatus,
-          statusHistory: newStatusHistory,
-          isDelivered: newStatus === 'Delivery'
-        };
+      if (customersError) {
+        console.error('Error loading customers:', customersError);
+      } else {
+        setCustomers(customersData || []);
       }
-      return order;
-    }));
+
+      // Load orders
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (ordersError) {
+        console.error('Error loading orders:', ordersError);
+      } else {
+        setOrders(ordersData || []);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addCustomer = async (customerData: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => {
+    try {
+      const newCustomer = {
+        ...customerData,
+        id: Date.now().toString(),
+        customer_id: generateCustomerId(),
+        created_at: new Date().toISOString(),
+        orders: []
+      };
+
+      const { data, error } = await supabase
+        .from('customers')
+        .insert([newCustomer])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error adding customer:', error);
+        throw error;
+      }
+
+      setCustomers(prev => [data, ...prev]);
+    } catch (error) {
+      console.error('Error adding customer:', error);
+      throw error;
+    }
+  };
+
+  const updateCustomer = async (id: string, customerData: Partial<Customer>) => {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .update(customerData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating customer:', error);
+        throw error;
+      }
+
+      setCustomers(prev => prev.map(customer => 
+        customer.id === id ? data : customer
+      ));
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      throw error;
+    }
+  };
+
+  const deleteCustomer = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting customer:', error);
+        throw error;
+      }
+
+      setCustomers(prev => prev.filter(customer => customer.id !== id));
+      setOrders(prev => prev.filter(order => order.customerId !== id));
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      throw error;
+    }
+  };
+
+  const addOrder = async (orderData: Omit<Order, 'id' | 'orderId' | 'createdAt' | 'currentStatus' | 'statusHistory' | 'isDelivered'>) => {
+    try {
+      const initialStatus = 'Order Received';
+      const newOrder = {
+        ...orderData,
+        id: Date.now().toString(),
+        order_id: generateOrderId(orderData.orderType),
+        created_at: new Date().toISOString(),
+        current_status: initialStatus,
+        status_history: [{
+          stage: initialStatus,
+          completed_at: new Date().toISOString(),
+          notes: 'Order created'
+        }],
+        is_delivered: false,
+        delivery_date: orderData.deliveryDate.toISOString(),
+        given_date: orderData.givenDate.toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('orders')
+        .insert([newOrder])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error adding order:', error);
+        throw error;
+      }
+
+      setOrders(prev => [data, ...prev]);
+    } catch (error) {
+      console.error('Error adding order:', error);
+      throw error;
+    }
+  };
+
+  const updateOrder = async (id: string, orderData: Partial<Order>) => {
+    try {
+      const updateData: any = { ...orderData };
+      
+      // Convert Date objects to ISO strings for Supabase
+      if (orderData.deliveryDate) {
+        updateData.delivery_date = orderData.deliveryDate.toISOString();
+        delete updateData.deliveryDate;
+      }
+      if (orderData.givenDate) {
+        updateData.given_date = orderData.givenDate.toISOString();
+        delete updateData.givenDate;
+      }
+
+      const { data, error } = await supabase
+        .from('orders')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating order:', error);
+        throw error;
+      }
+
+      setOrders(prev => prev.map(order => 
+        order.id === id ? data : order
+      ));
+    } catch (error) {
+      console.error('Error updating order:', error);
+      throw error;
+    }
+  };
+
+  const deleteOrder = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting order:', error);
+        throw error;
+      }
+
+      setOrders(prev => prev.filter(order => order.id !== id));
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      throw error;
+    }
+  };
+
+  const updateOrderStatus = async (orderId: string, newStatus: string, notes?: string) => {
+    try {
+      const order = orders.find(o => o.orderId === orderId);
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      const newStatusHistory = [
+        ...order.statusHistory,
+        {
+          stage: newStatus,
+          completed_at: new Date().toISOString(),
+          notes
+        }
+      ];
+
+      const { data, error } = await supabase
+        .from('orders')
+        .update({
+          current_status: newStatus,
+          status_history: newStatusHistory,
+          is_delivered: newStatus === 'Delivery'
+        })
+        .eq('order_id', orderId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating order status:', error);
+        throw error;
+      }
+
+      setOrders(prev => prev.map(order => 
+        order.orderId === orderId ? data : order
+      ));
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      throw error;
+    }
   };
 
   const searchOrders = (query: string): Order[] => {
@@ -274,17 +320,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       deleteOrder,
       updateOrderStatus,
       searchOrders,
-      searchCustomers
+      searchCustomers,
+      loading
     }}>
       {children}
     </DataContext.Provider>
   );
-};
-
-export const useData = () => {
-  const context = useContext(DataContext);
-  if (context === undefined) {
-    throw new Error('useData must be used within a DataProvider');
-  }
-  return context;
 };

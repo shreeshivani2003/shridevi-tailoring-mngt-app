@@ -70,7 +70,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
     setShowCustomerResults(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!selectedCustomer) {
@@ -102,13 +102,18 @@ const OrderModal: React.FC<OrderModalProps> = ({
       approximateAmount: parseFloat(formData.approximateAmount) || 0
     };
 
-    if (mode === 'add') {
-      addOrder(orderData);
-    } else if (mode === 'edit' && order) {
-      updateOrder(order.id, orderData);
+    try {
+      if (mode === 'add') {
+        await addOrder(orderData);
+      } else if (mode === 'edit' && order) {
+        await updateOrder(order.id, orderData);
+      }
+      
+      onClose();
+    } catch (error) {
+      console.error('Error saving order:', error);
+      alert('Failed to save order. Please try again.');
     }
-    
-    onClose();
   };
 
   const handleSizeChange = (key: string, value: string) => {
