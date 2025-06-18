@@ -80,16 +80,6 @@ const Login: React.FC = () => {
           <p className="text-pink-600">Management System</p>
         </div>
 
-        {/* Available Credentials */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-800 font-medium mb-2">Available Test Accounts:</p>
-          <div className="text-xs text-blue-700 space-y-1">
-            <p>• Super Admin: <code>superadmin</code> / <code>admin123</code></p>
-            <p>• Admin: <code>admin</code> / <code>admin123</code></p>
-            <p>• User: <code>user</code> / <code>user123</code></p>
-          </div>
-        </div>
-
         <div className="flex mb-6">
           <button
             type="button"
@@ -198,9 +188,16 @@ const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-pink-500 text-white py-3 px-4 rounded-lg font-medium hover:bg-pink-600 focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white py-3 rounded-lg font-medium hover:from-pink-600 hover:to-rose-600 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {loading ? 'Loading...' : (isSignUp ? 'Create Account' : 'Sign In')}
+            {loading ? (
+              'Processing...'
+            ) : (
+              <>
+                {isSignUp ? <UserPlus className="w-5 h-5" /> : <User className="w-5 h-5" />}
+                {isSignUp ? 'Create Account' : 'Sign In'}
+              </>
+            )}
           </button>
         </form>
       </div>
