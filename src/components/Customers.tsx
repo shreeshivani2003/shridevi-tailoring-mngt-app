@@ -14,13 +14,20 @@ import {
 import CustomerModal from './CustomerModal';
 
 const Customers: React.FC = () => {
-  const { customers, searchCustomers, deleteCustomer } = useData();
+  const { getCustomersWithOrderCounts, searchCustomers, deleteCustomer } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'view'>('add');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const filteredCustomers = searchCustomers(searchQuery);
+  // Get customers with their order counts
+  const customersWithOrderCounts = getCustomersWithOrderCounts();
+  const filteredCustomers = searchQuery.trim() 
+    ? searchCustomers(searchQuery).map(customer => ({
+        ...customer,
+        orderCount: customersWithOrderCounts.find(c => c.id === customer.id)?.orderCount || 0
+      }))
+    : customersWithOrderCounts;
 
   const handleAddCustomer = () => {
     setSelectedCustomer(null);
@@ -141,7 +148,7 @@ const Customers: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 <Package className="w-4 h-4 text-gray-400" />
-                <span className="text-sm text-gray-600">{customer.orders.length} orders</span>
+                <span className="text-sm text-gray-600">{customer.orderCount} orders</span>
               </div>
 
               {customer.notes && (

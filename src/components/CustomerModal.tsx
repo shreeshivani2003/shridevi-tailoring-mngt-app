@@ -12,7 +12,7 @@ interface CustomerModalProps {
 }
 
 const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer, mode }) => {
-  const { addCustomer, updateCustomer } = useData();
+  const { addCustomer, updateCustomer, getCustomerOrderCount, orders } = useData();
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -24,6 +24,10 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
   });
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Get customer's orders and order count
+  const customerOrders = customer ? orders.filter(order => order.customerId === customer.id) : [];
+  const customerOrderCount = customer ? getCustomerOrderCount(customer.id) : 0;
 
   useEffect(() => {
     if (customer && (mode === 'edit' || mode === 'view')) {
@@ -222,16 +226,16 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
             </div>
 
             {/* Order History for View Mode */}
-            {isViewMode && customer && customer.orders.length > 0 && (
+            {isViewMode && customer && customerOrderCount > 0 && (
               <div className="border-t pt-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800">Order History</h3>
                   <span className="bg-pink-100 text-pink-800 text-sm font-medium px-2 py-1 rounded-full">
-                    {customer.orders.length} orders
+                    {customerOrderCount} orders
                   </span>
                 </div>
                 <div className="space-y-3 max-h-60 overflow-y-auto">
-                  {customer.orders.map(order => (
+                  {customerOrders.map(order => (
                     <div key={order.id} className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex justify-between items-start">
                         <div>

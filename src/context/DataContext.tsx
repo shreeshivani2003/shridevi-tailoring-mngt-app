@@ -14,6 +14,8 @@ interface DataContextType {
   updateOrderStatus: (orderId: string, newStatus: string, notes?: string) => Promise<void>;
   searchOrders: (query: string) => Order[];
   searchCustomers: (query: string) => Customer[];
+  getCustomersWithOrderCounts: () => (Customer & { orderCount: number })[];
+  getCustomerOrderCount: (customerId: string) => number;
   loading: boolean;
   supabaseConfigured: boolean;
 }
@@ -289,10 +291,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addOrder = async (orderData: Omit<Order, 'id' | 'orderId' | 'createdAt' | 'currentStatus' | 'statusHistory' | 'isDelivered'>) => {
     try {
       const initialStatus = 'Order Received';
+      
+      // Convert camelCase to snake_case for all fields
       const newOrder = {
-        ...orderData,
         id: Date.now().toString(),
         order_id: generateOrderId(orderData.orderType),
+        customer_id: orderData.customerId,
+        customer_name: orderData.customerName,
+        order_type: orderData.orderType,
+        material_type: orderData.materialType,
+        size_book_no: orderData.sizeBookNo,
+        hint: orderData.hint,
+        description: orderData.description,
+        sizes: orderData.sizes,
+        reference_image: orderData.referenceImage || null,
+        notes: orderData.notes,
+        delivery_date: orderData.deliveryDate.toISOString(),
+        given_date: orderData.givenDate.toISOString(),
+        approximate_amount: orderData.approximateAmount,
         created_at: new Date().toISOString(),
         current_status: initialStatus,
         status_history: [{
@@ -300,9 +316,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           completed_at: new Date().toISOString(),
           notes: 'Order created'
         }],
-        is_delivered: false,
-        delivery_date: orderData.deliveryDate.toISOString(),
-        given_date: orderData.givenDate.toISOString()
+        is_delivered: false
       };
 
       const { data, error } = await supabase
@@ -325,16 +339,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateOrder = async (id: string, orderData: Partial<Order>) => {
     try {
-      const updateData: any = { ...orderData };
+      const updateData: any = {};
+      
+      // Convert camelCase to snake_case for all fields
+      if (orderData.customerId !== undefined) updateData.customer_id = orderData.customerId;
+      if (orderData.customerName !== undefined) updateData.customer_name = orderData.customerName;
+      if (orderData.orderType !== undefined) updateData.order_type = orderData.orderType;
+      if (orderData.materialType !== undefined) updateData.material_type = orderData.materialType;
+      if (orderData.sizeBookNo !== undefined) updateData.size_book_no = orderData.sizeBookNo;
+      if (orderData.hint !== undefined) updateData.hint = orderData.hint;
+      if (orderData.description !== undefined) updateData.description = orderData.description;
+      if (orderData.sizes !== undefined) updateData.sizes = orderData.sizes;
+      if (orderData.referenceImage !== undefined) updateData.reference_image = orderData.referenceImage;
+      if (orderData.notes !== undefined) updateData.notes = orderData.notes;
+      if (orderData.approximateAmount !== undefined) updateData.approximate_amount = orderData.approximateAmount;
+      if (orderData.currentStatus !== undefined) updateData.current_status = orderData.currentStatus;
+      if (orderData.statusHistory !== undefined) updateData.status_history = orderData.statusHistory;
+      if (orderData.isDelivered !== undefined) updateData.is_delivered = orderData.isDelivered;
       
       // Convert Date objects to ISO strings for Supabase
       if (orderData.deliveryDate) {
         updateData.delivery_date = orderData.deliveryDate.toISOString();
-        delete updateData.deliveryDate;
       }
       if (orderData.givenDate) {
         updateData.given_date = orderData.givenDate.toISOString();
-        delete updateData.givenDate;
       }
 
       const { data, error } = await supabase
@@ -441,6 +469,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  // Calculate order count for a customer
+  const getCustomerOrderCount = (customerId: string): number => {
+    return orders.filter(order => order.customerId === customerId).length;
+  };
+
+  // Get customers with their order counts
+  const getCustomersWithOrderCounts = (): (Customer & { orderCount: number })[] => {
+    return customers.map(customer => ({
+      ...customer,
+      orderCount: getCustomerOrderCount(customer.id)
+    }));
+  };
+
   return (
     <DataContext.Provider value={{
       customers,
@@ -454,6 +495,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updateOrderStatus,
       searchOrders,
       searchCustomers,
+      getCustomersWithOrderCounts,
+      getCustomerOrderCount,
       loading,
       supabaseConfigured
     }}>
