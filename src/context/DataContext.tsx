@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Customer, Order, MaterialType, OrderType, materialStages } from '../types';
-import { supabase, supabaseConfig } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 interface DataContextType {
   customers: Customer[];
@@ -17,7 +17,6 @@ interface DataContextType {
   getCustomersWithOrderCounts: () => (Customer & { orderCount: number })[];
   getCustomerOrderCount: (customerId: string) => number;
   loading: boolean;
-  supabaseConfigured: boolean;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -45,7 +44,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [supabaseConfigured, setSupabaseConfigured] = useState(true);
 
   // Load initial data from Supabase
   useEffect(() => {
@@ -56,34 +54,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       
-      // Check if Supabase is configured
-      if (!supabaseConfig.isConfigured) {
-        // Load from localStorage as fallback
-        const storedCustomers = localStorage.getItem('customers');
-        const storedOrders = localStorage.getItem('orders');
-        
-        if (storedCustomers) {
-          const customersData = JSON.parse(storedCustomers);
-          setCustomers(customersData.map((c: any) => ({
-            ...c,
-            createdAt: new Date(c.createdAt)
-          })));
-        }
-        
-        if (storedOrders) {
-          const ordersData = JSON.parse(storedOrders);
-          setOrders(ordersData.map((o: any) => ({
-            ...o,
-            createdAt: new Date(o.createdAt),
-            deliveryDate: new Date(o.deliveryDate),
-            givenDate: new Date(o.givenDate)
-          })));
-        }
-        
-        setSupabaseConfigured(false);
-        return;
-      }
-      
       // Load customers
       const { data: customersData, error: customersError } = await supabase
         .from('customers')
@@ -92,27 +62,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (customersError) {
         console.error('Error loading customers:', customersError);
-        if (customersError.message.includes('Supabase not configured')) {
-          setSupabaseConfigured(false);
-        }
-        // If Supabase is not configured, use empty array
-        setCustomers([]);
-      } else {
-        // Map Supabase data to our app format
-        const mappedCustomers = (customersData || []).map((customer: any) => ({
-          id: customer.id,
-          customerId: customer.customer_id,
-          name: customer.name,
-          phone: customer.phone,
-          whatsappNumber: customer.whatsapp_number,
-          whatsappEnabled: customer.whatsapp_enabled,
-          address: customer.address,
-          notes: customer.notes,
-          createdAt: new Date(customer.created_at),
-          orders: []
-        }));
-        setCustomers(mappedCustomers);
+        throw customersError;
       }
+
+      // Map Supabase data to our app format
+      const mappedCustomers = (customersData || []).map((customer: any) => ({
+        id: customer.id,
+        customerId: customer.customer_id,
+        name: customer.name,
+        phone: customer.phone,
+        whatsappNumber: customer.whatsapp_number,
+        whatsappEnabled: customer.whatsapp_enabled,
+        address: customer.address,
+        notes: customer.notes,
+        createdAt: new Date(customer.created_at),
+        orders: []
+      }));
+      setCustomers(mappedCustomers);
 
       // Load orders
       const { data: ordersData, error: ordersError } = await supabase
@@ -122,39 +88,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (ordersError) {
         console.error('Error loading orders:', ordersError);
-        if (ordersError.message.includes('Supabase not configured')) {
-          setSupabaseConfigured(false);
-        }
-        // If Supabase is not configured, use empty array
-        setOrders([]);
-      } else {
-        // Map Supabase data to our app format
-        const mappedOrders = (ordersData || []).map((order: any) => ({
-          id: order.id,
-          orderId: order.order_id,
-          customerId: order.customer_id,
-          customerName: order.customer_name,
-          materialType: order.material_type,
-          description: order.description,
-          orderType: order.order_type,
-          givenDate: new Date(order.given_date),
-          deliveryDate: new Date(order.delivery_date),
-          currentStatus: order.current_status,
-          statusHistory: order.status_history || [],
-          isDelivered: order.is_delivered,
-          createdAt: new Date(order.created_at),
-          sizes: order.sizes || {},
-          referenceImage: order.reference_image,
-          notes: order.notes,
-          approximateAmount: order.approximate_amount || 0,
-          sizeBookNo: order.size_book_no,
-          hint: order.hint
-        }));
-        setOrders(mappedOrders);
+        throw ordersError;
       }
+
+      // Map Supabase data to our app format
+      const mappedOrders = (ordersData || []).map((order: any) => ({
+        id: order.id,
+        orderId: order.order_id,
+        customerId: order.customer_id,
+        customerName: order.customer_name,
+        materialType: order.material_type,
+        description: order.description,
+        orderType: order.order_type,
+        givenDate: new Date(order.given_date),
+        deliveryDate: new Date(order.delivery_date),
+        currentStatus: order.current_status,
+        statusHistory: order.status_history || [],
+        isDelivered: order.is_delivered,
+        createdAt: new Date(order.created_at),
+        sizes: order.sizes || {},
+        referenceImage: order.reference_image,
+        notes: order.notes,
+        approximateAmount: order.approximate_amount || 0,
+        sizeBookNo: order.size_book_no,
+        hint: order.hint
+      }));
+      setOrders(mappedOrders);
     } catch (error) {
       console.error('Error loading data:', error);
-      // Set empty arrays as fallback
+      // Set empty arrays on error
       setCustomers([]);
       setOrders([]);
     } finally {
@@ -171,16 +133,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date(),
         orders: []
       };
-
-      // Check if Supabase is configured
-      if (!supabaseConfig.isConfigured) {
-        // Fallback to localStorage for development
-        const existingCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
-        const updatedCustomers = [newCustomer, ...existingCustomers];
-        localStorage.setItem('customers', JSON.stringify(updatedCustomers));
-        setCustomers(prev => [newCustomer, ...prev]);
-        return;
-      }
 
       // Map to Supabase schema (snake_case)
       const supabaseCustomer = {
@@ -223,33 +175,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCustomers(prev => [mappedCustomer, ...prev]);
     } catch (error) {
       console.error('Error adding customer:', error);
-      
-      // If Supabase fails, try localStorage fallback
-      if (error instanceof Error && error.message.includes('Supabase not configured')) {
-        const newCustomer: Customer = {
-          ...customerData,
-          id: Date.now().toString(),
-          customerId: generateCustomerId(),
-          createdAt: new Date(),
-          orders: []
-        };
-        
-        const existingCustomers = JSON.parse(localStorage.getItem('customers') || '[]');
-        const updatedCustomers = [newCustomer, ...existingCustomers];
-        localStorage.setItem('customers', JSON.stringify(updatedCustomers));
-        setCustomers(prev => [newCustomer, ...prev]);
-        return;
-      }
-      
       throw error;
     }
   };
 
   const updateCustomer = async (id: string, customerData: Partial<Customer>) => {
     try {
+      // Convert camelCase to snake_case for Supabase
+      const updateData: any = {};
+      if (customerData.customerId !== undefined) updateData.customer_id = customerData.customerId;
+      if (customerData.name !== undefined) updateData.name = customerData.name;
+      if (customerData.phone !== undefined) updateData.phone = customerData.phone;
+      if (customerData.whatsappNumber !== undefined) updateData.whatsapp_number = customerData.whatsappNumber;
+      if (customerData.whatsappEnabled !== undefined) updateData.whatsapp_enabled = customerData.whatsappEnabled;
+      if (customerData.address !== undefined) updateData.address = customerData.address;
+      if (customerData.notes !== undefined) updateData.notes = customerData.notes;
+
       const { data, error } = await supabase
         .from('customers')
-        .update(customerData)
+        .update(updateData)
         .eq('id', id)
         .select()
         .single();
@@ -259,8 +203,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
+      // Map back to our app's format
+      const mappedCustomer: Customer = {
+        id: data.id,
+        customerId: data.customer_id,
+        name: data.name,
+        phone: data.phone,
+        whatsappNumber: data.whatsapp_number,
+        whatsappEnabled: data.whatsapp_enabled,
+        address: data.address,
+        notes: data.notes,
+        createdAt: new Date(data.created_at),
+        orders: []
+      };
+
       setCustomers(prev => prev.map(customer => 
-        customer.id === id ? data : customer
+        customer.id === id ? mappedCustomer : customer
       ));
     } catch (error) {
       console.error('Error updating customer:', error);
@@ -330,7 +288,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
-      setOrders(prev => [data, ...prev]);
+      // Map back to our app's format
+      const mappedOrder: Order = {
+        id: data.id,
+        orderId: data.order_id,
+        customerId: data.customer_id,
+        customerName: data.customer_name,
+        materialType: data.material_type,
+        description: data.description,
+        orderType: data.order_type,
+        givenDate: new Date(data.given_date),
+        deliveryDate: new Date(data.delivery_date),
+        currentStatus: data.current_status,
+        statusHistory: data.status_history || [],
+        isDelivered: data.is_delivered,
+        createdAt: new Date(data.created_at),
+        sizes: data.sizes || {},
+        referenceImage: data.reference_image,
+        notes: data.notes,
+        approximateAmount: data.approximate_amount || 0,
+        sizeBookNo: data.size_book_no,
+        hint: data.hint
+      };
+
+      setOrders(prev => [mappedOrder, ...prev]);
     } catch (error) {
       console.error('Error adding order:', error);
       throw error;
@@ -377,8 +358,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
+      // Map back to our app's format
+      const mappedOrder: Order = {
+        id: data.id,
+        orderId: data.order_id,
+        customerId: data.customer_id,
+        customerName: data.customer_name,
+        materialType: data.material_type,
+        description: data.description,
+        orderType: data.order_type,
+        givenDate: new Date(data.given_date),
+        deliveryDate: new Date(data.delivery_date),
+        currentStatus: data.current_status,
+        statusHistory: data.status_history || [],
+        isDelivered: data.is_delivered,
+        createdAt: new Date(data.created_at),
+        sizes: data.sizes || {},
+        referenceImage: data.reference_image,
+        notes: data.notes,
+        approximateAmount: data.approximate_amount || 0,
+        sizeBookNo: data.size_book_no,
+        hint: data.hint
+      };
+
       setOrders(prev => prev.map(order => 
-        order.id === id ? data : order
+        order.id === id ? mappedOrder : order
       ));
     } catch (error) {
       console.error('Error updating order:', error);
@@ -437,8 +441,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
+      // Map back to our app's format
+      const mappedOrder: Order = {
+        id: data.id,
+        orderId: data.order_id,
+        customerId: data.customer_id,
+        customerName: data.customer_name,
+        materialType: data.material_type,
+        description: data.description,
+        orderType: data.order_type,
+        givenDate: new Date(data.given_date),
+        deliveryDate: new Date(data.delivery_date),
+        currentStatus: data.current_status,
+        statusHistory: data.status_history || [],
+        isDelivered: data.is_delivered,
+        createdAt: new Date(data.created_at),
+        sizes: data.sizes || {},
+        referenceImage: data.reference_image,
+        notes: data.notes,
+        approximateAmount: data.approximate_amount || 0,
+        sizeBookNo: data.size_book_no,
+        hint: data.hint
+      };
+
       setOrders(prev => prev.map(order => 
-        order.orderId === orderId ? data : order
+        order.orderId === orderId ? mappedOrder : order
       ));
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -497,29 +524,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       searchCustomers,
       getCustomersWithOrderCounts,
       getCustomerOrderCount,
-      loading,
-      supabaseConfigured
+      loading
     }}>
       {children}
-      {!supabaseConfigured && (
-        <div className="fixed bottom-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded shadow-lg max-w-md">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium">
-                Supabase not configured
-              </p>
-              <p className="text-sm mt-1">
-                Data is not being saved to database. Please check SUPABASE_SETUP.md for instructions.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </DataContext.Provider>
   );
 };

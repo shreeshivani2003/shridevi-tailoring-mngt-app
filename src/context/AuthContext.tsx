@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
+import { supabase } from '../lib/supabase';
+import bcrypt from 'bcryptjs';
 
 interface AuthContextType {
   user: User | null;
@@ -12,57 +14,70 @@ interface AuthContextType {
   updateUser: (id: string, userData: Partial<User>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   loading: boolean;
-  supabaseConfigured: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for consistent authentication
-const mockUsers: User[] = [
-  {
-    id: 'super_admin_001',
-    username: 'superadmin',
-    password: '',
-    role: 'super_admin',
-    createdAt: new Date('2024-01-01')
-  },
-  {
-    id: 'admin_001',
-    username: 'admin',
-    password: '',
-    role: 'admin',
-    createdAt: new Date('2024-01-01')
-  },
-  {
-    id: 'user_001',
-    username: 'user',
-    password: '',
-    role: 'user',
-    createdAt: new Date('2024-01-01')
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
-];
+  return context;
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [supabaseConfigured, setSupabaseConfigured] = useState(false);
+
+  // Load users from Supabase
+  const loadUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading users:', error);
+        throw error;
+      }
+
+      const mappedUsers = (data || []).map((user: any) => ({
+        id: user.id,
+        username: user.username,
+        password: '', // Don't load passwords
+        role: user.role,
+        createdAt: new Date(user.created_at)
+      }));
+      setUsers(mappedUsers);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      setUsers([]);
+    }
+  };
 
   useEffect(() => {
     const initAuth = async () => {
       setLoading(true);
-      setSupabaseConfigured(false); // Always use mock mode for consistency
       
-      // Check for remembered user
-      const rememberedUser = localStorage.getItem('rememberedUser');
-      if (rememberedUser) {
-        setUser(JSON.parse(rememberedUser));
-      } else {
-        // Check for session user
-        const sessionUser = sessionStorage.getItem('user');
-        if (sessionUser) {
-          setUser(JSON.parse(sessionUser));
+      try {
+        await loadUsers();
+        
+        // Check for remembered user
+        const rememberedUser = localStorage.getItem('rememberedUser');
+        if (rememberedUser) {
+          setUser(JSON.parse(rememberedUser));
+        } else {
+          // Check for session user
+          const sessionUser = sessionStorage.getItem('user');
+          if (sessionUser) {
+            setUser(JSON.parse(sessionUser));
+          }
         }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
       }
       
       setLoading(false);
@@ -73,20 +88,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (username: string, password: string, rememberMe: boolean = false): Promise<{success: boolean, user?: User, error?: string}> => {
     try {
-      // Mock authentication - predefined credentials
-      let foundUser: User | null = null;
-      
-      if (username === 'superadmin' && password === 'admin123') {
-        foundUser = mockUsers.find(u => u.username === 'superadmin') || null;
-      } else if (username === 'admin' && password === 'admin123') {
-        foundUser = mockUsers.find(u => u.username === 'admin') || null;
-      } else if (username === 'user' && password === 'user123') {
-        foundUser = mockUsers.find(u => u.username === 'user') || null;
-      }
-      
-      if (!foundUser) {
+      // Supabase authentication
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single();
+
+      if (error || !data) {
         return { success: false, error: 'Invalid username or password' };
       }
+
+      // Verify password
+      const isValidPassword = await bcrypt.compare(password, data.password_hash);
+      if (!isValidPassword) {
+        return { success: false, error: 'Invalid username or password' };
+      }
+
+      const foundUser: User = {
+        id: data.id,
+        username: data.username,
+        password: '',
+        role: data.role,
+        createdAt: new Date(data.created_at)
+      };
 
       setUser(foundUser);
       
@@ -108,23 +133,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (username: string, password: string): Promise<{success: boolean, user?: User, error?: string}> => {
     try {
       // Check if username already exists
-      const existingUser = users.find(u => u.username === username);
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('username')
+        .eq('username', username)
+        .single();
+
       if (existingUser) {
         return { success: false, error: 'Username already exists' };
       }
 
-      // Create new user
-      const newUser: User = {
-        id: `user_${Date.now()}`,
+      // Hash password
+      const saltRounds = 10;
+      const passwordHash = await bcrypt.hash(password, saltRounds);
+
+      const newUser = {
+        id: Date.now().toString(),
         username,
-        password: '',
-        role: 'user',
-        createdAt: new Date()
+        password_hash: passwordHash,
+        role: 'user', // New users get 'user' role by default
+        created_at: new Date().toISOString()
       };
 
-      setUsers(prev => [...prev, newUser]);
+      const { data, error } = await supabase
+        .from('users')
+        .insert([newUser])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating user:', error);
+        return { success: false, error: 'Failed to create user' };
+      }
+
+      const createdUser: User = {
+        id: data.id,
+        username: data.username,
+        password: '',
+        role: data.role,
+        createdAt: new Date(data.created_at)
+      };
+
+      setUsers(prev => [createdUser, ...prev]);
       
-      return { success: true, user: newUser };
+      return { success: true, user: createdUser };
     } catch (error) {
       console.error('Sign up error:', error);
       return { success: false, error: 'An error occurred during sign up' };
@@ -139,16 +191,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addUser = async (userData: Omit<User, 'id' | 'createdAt'>) => {
     try {
-      // Create new user
-      const newUser: User = {
-        id: `user_${Date.now()}`,
+      // Hash password
+      const saltRounds = 10;
+      const passwordHash = await bcrypt.hash(userData.password, saltRounds);
+
+      const newUser = {
+        id: Date.now().toString(),
         username: userData.username,
-        password: '',
+        password_hash: passwordHash,
         role: userData.role,
-        createdAt: new Date()
+        created_at: new Date().toISOString()
       };
 
-      setUsers(prev => [...prev, newUser]);
+      const { data, error } = await supabase
+        .from('users')
+        .insert([newUser])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error adding user:', error);
+        throw error;
+      }
+
+      const createdUser: User = {
+        id: data.id,
+        username: data.username,
+        password: '',
+        role: data.role,
+        createdAt: new Date(data.created_at)
+      };
+
+      setUsers(prev => [createdUser, ...prev]);
     } catch (error) {
       console.error('Error adding user:', error);
       throw error;
@@ -157,29 +231,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateUser = async (id: string, userData: Partial<User>) => {
     try {
-      const updatedUser = users.find(u => u.id === id);
-      if (!updatedUser) {
-        throw new Error('User not found');
+      const updateData: any = {};
+      
+      if (userData.username !== undefined) updateData.username = userData.username;
+      if (userData.role !== undefined) updateData.role = userData.role;
+      
+      // Hash password if provided
+      if (userData.password) {
+        const saltRounds = 10;
+        updateData.password_hash = await bcrypt.hash(userData.password, saltRounds);
       }
 
-      const updatedUserData: User = { ...updatedUser, ...userData };
+      const { data, error } = await supabase
+        .from('users')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
 
-      const updatedUsers = users.map(u => u.id === id ? updatedUserData : u);
-      setUsers(updatedUsers);
-      
-      // Update current user if it's the same user being updated
-      if (user?.id === id) {
-        setUser(updatedUserData);
+      if (error) {
+        console.error('Error updating user:', error);
+        throw error;
+      }
+
+      const updatedUser: User = {
+        id: data.id,
+        username: data.username,
+        password: '',
+        role: data.role,
+        createdAt: new Date(data.created_at)
+      };
+
+      setUsers(prev => prev.map(user => 
+        user.id === id ? updatedUser : user
+      ));
+
+      // Update current user if it's the same user
+      if (user && user.id === id) {
+        setUser(updatedUser);
         
         // Update stored user data
         const rememberedUser = localStorage.getItem('rememberedUser');
-        const sessionUser = sessionStorage.getItem('user');
-        
         if (rememberedUser) {
-          localStorage.setItem('rememberedUser', JSON.stringify(updatedUserData));
+          localStorage.setItem('rememberedUser', JSON.stringify(updatedUser));
         }
+        
+        const sessionUser = sessionStorage.getItem('user');
         if (sessionUser) {
-          sessionStorage.setItem('user', JSON.stringify(updatedUserData));
+          sessionStorage.setItem('user', JSON.stringify(updatedUser));
         }
       }
     } catch (error) {
@@ -190,8 +289,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deleteUser = async (id: string) => {
     try {
-      const updatedUsers = users.filter(u => u.id !== id);
-      setUsers(updatedUsers);
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting user:', error);
+        throw error;
+      }
+
+      setUsers(prev => prev.filter(user => user.id !== id));
+      
+      // Logout if current user is deleted
+      if (user && user.id === id) {
+        logout();
+      }
     } catch (error) {
       console.error('Error deleting user:', error);
       throw error;
@@ -209,18 +322,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addUser,
       updateUser,
       deleteUser,
-      loading,
-      supabaseConfigured
+      loading
     }}>
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };

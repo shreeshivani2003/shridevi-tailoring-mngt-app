@@ -80,6 +80,7 @@ const Login: React.FC = () => {
           <p className="text-pink-600">Management System</p>
         </div>
 
+        {/* Login/Signup toggle */}
         <div className="flex mb-6">
           <button
             type="button"
@@ -117,7 +118,7 @@ const Login: React.FC = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-                placeholder="Enter username"
+                placeholder="Enter unique username"
               />
             </div>
           </div>
@@ -200,6 +201,16 @@ const Login: React.FC = () => {
             )}
           </button>
         </form>
+
+        {isSignUp && (
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <p className="text-xs text-blue-700 font-medium mb-1">New Account Info:</p>
+            <p className="text-xs text-blue-600">
+              New accounts are created with 'User' role by default. 
+              Contact Super Admin to upgrade permissions.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
