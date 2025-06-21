@@ -31,17 +31,28 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. Create indexes for better performance
+-- 3. Create users table
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 4. Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS idx_orders_delivery_date ON orders(delivery_date);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(current_status);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
--- 4. Enable Row Level Security (RLS)
+-- 5. Enable Row Level Security (RLS)
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
--- 5. Create policies for customers table
+-- 6. Create policies for customers table
 CREATE POLICY "Enable read access for all users" ON customers
   FOR SELECT USING (true);
 
@@ -54,7 +65,7 @@ CREATE POLICY "Enable update access for all users" ON customers
 CREATE POLICY "Enable delete access for all users" ON customers
   FOR DELETE USING (true);
 
--- 6. Create policies for orders table
+-- 7. Create policies for orders table
 CREATE POLICY "Enable read access for all users" ON orders
   FOR SELECT USING (true);
 
@@ -65,4 +76,17 @@ CREATE POLICY "Enable update access for all users" ON orders
   FOR UPDATE USING (true);
 
 CREATE POLICY "Enable delete access for all users" ON orders
+  FOR DELETE USING (true);
+
+-- 8. Create policies for users table
+CREATE POLICY "Enable read access for all users" ON users
+  FOR SELECT USING (true);
+
+CREATE POLICY "Enable insert access for all users" ON users
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Enable update access for all users" ON users
+  FOR UPDATE USING (true);
+
+CREATE POLICY "Enable delete access for all users" ON users
   FOR DELETE USING (true); 
