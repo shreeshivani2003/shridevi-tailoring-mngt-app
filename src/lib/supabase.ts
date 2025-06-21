@@ -9,12 +9,10 @@ const isSupabaseConfigured = supabaseUrl &&
   supabaseUrl !== 'https://your-project.supabase.co' &&
   supabaseUrl !== '';
 
-if (!isSupabaseConfigured) {
-  throw new Error(
-    'Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables. ' +
-    'Check SUPABASE_SETUP.md for setup instructions.'
-  );
-}
+// Create Supabase client with fallback for build time
+export const supabase = isSupabaseConfigured 
+  ? createClient(supabaseUrl!, supabaseAnonKey!)
+  : createClient('https://placeholder.supabase.co', 'placeholder-key');
 
-// Create Supabase client
-export const supabase = createClient(supabaseUrl!, supabaseAnonKey!); 
+// Export configuration status for runtime checks
+export const isSupabaseReady = isSupabaseConfigured; 
