@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Customer, Order, MaterialType, OrderType, materialStages } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseReady } from '../lib/supabase';
 
 interface DataContextType {
   customers: Customer[];
@@ -53,6 +53,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadData = async () => {
     try {
       setLoading(true);
+      
+      // First, check if the orders table has all required columns
+      const { data: schemaCheck, error: schemaError } = await supabase
+        .from('orders')
+        .select('id, order_id, customer_id, customer_name, material_type, description, order_type, given_date, delivery_date, current_status, status_history, is_delivered, created_at, size_book_no, hint, reference_image, approximate_amount, sizes, notes')
+        .limit(1);
+
+      if (schemaError) {
+        console.error('Schema check failed:', schemaError);
+        console.error('This might indicate missing columns in the orders table.');
+        console.error('Please run the updated schema from supabase-schema.sql');
+      } else {
+        console.log('Database schema check passed');
+      }
       
       // Load customers
       const { data: customersData, error: customersError } = await supabase
@@ -248,6 +262,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addOrder = async (orderData: Omit<Order, 'id' | 'orderId' | 'createdAt' | 'currentStatus' | 'statusHistory' | 'isDelivered'>) => {
     try {
+      // Check if Supabase is configured
+      if (!isSupabaseReady) {
+        throw new Error('Supabase not configured. Please create a .env file with your Supabase credentials.');
+      }
+
       const initialStatus = 'Order Received';
       
       // Convert camelCase to snake_case for all fields
@@ -277,6 +296,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         is_delivered: false
       };
 
+      console.log('Attempting to insert order:', newOrder);
+
       const { data, error } = await supabase
         .from('orders')
         .insert([newOrder])
@@ -284,9 +305,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
 
       if (error) {
-        console.error('Error adding order:', error);
-        throw error;
+        console.error('Supabase error adding order:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw new Error(`Database error: ${error.message}`);
       }
+
+      console.log('Order inserted successfully:', data);
 
       // Map back to our app's format
       const mappedOrder: Order = {

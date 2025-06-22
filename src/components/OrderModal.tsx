@@ -68,11 +68,19 @@ const OrderModal: React.FC<OrderModalProps> = ({
     }
 
     const givenDate = new Date();
-    const deliveryDate = new Date(formData.deliveryDate);
+    let deliveryDate: Date;
     
     // For regular orders, set delivery date to 7 days after given date
     if (formData.orderType === 'regular') {
+      deliveryDate = new Date();
       deliveryDate.setDate(givenDate.getDate() + 7);
+    } else {
+      // For emergency orders, use the selected delivery date
+      if (!formData.deliveryDate) {
+        alert('Please select a delivery date for emergency orders');
+        return;
+      }
+      deliveryDate = new Date(formData.deliveryDate);
     }
 
     const orderData = {
@@ -91,6 +99,14 @@ const OrderModal: React.FC<OrderModalProps> = ({
       approximateAmount: parseFloat(formData.approximateAmount) || 0
     };
 
+    console.log('Submitting order data:', {
+      orderType: formData.orderType,
+      deliveryDate: deliveryDate.toISOString(),
+      givenDate: givenDate.toISOString(),
+      customerId: selectedCustomer.id,
+      customerName: selectedCustomer.name
+    });
+
     try {
       if (mode === 'add') {
         await addOrder(orderData);
@@ -101,7 +117,25 @@ const OrderModal: React.FC<OrderModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Error saving order:', error);
-      alert('Failed to save order. Please try again.');
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to save order. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Supabase not configured')) {
+          errorMessage = 'Database not configured. Please create a .env file with your Supabase credentials:\n\nVITE_SUPABASE_URL=your_supabase_url\nVITE_SUPABASE_ANON_KEY=your_supabase_anon_key\n\nCheck SUPABASE_SETUP.md for detailed instructions.';
+        } else if (error.message.includes('permission denied')) {
+          errorMessage = 'Permission denied. Please check your database permissions.';
+        } else if (error.message.includes('duplicate key')) {
+          errorMessage = 'An order with this ID already exists. Please try again.';
+        } else if (error.message.includes('foreign key')) {
+          errorMessage = 'Customer not found. Please select a valid customer.';
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
+      }
+      
+      alert(errorMessage);
     }
   };
 
@@ -253,7 +287,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                     formData.orderType === 'regular' ? 'bg-gray-50 cursor-not-allowed' : ''
                   }`}
                   disabled={formData.orderType === 'regular'}
-                  required
+                  required={formData.orderType !== 'regular'}
                 />
               </div>
               {formData.orderType === 'regular' && (

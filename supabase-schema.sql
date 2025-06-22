@@ -28,7 +28,13 @@ CREATE TABLE IF NOT EXISTS orders (
   current_status TEXT NOT NULL,
   status_history JSONB DEFAULT '[]',
   is_delivered BOOLEAN DEFAULT false,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  size_book_no TEXT,
+  hint TEXT,
+  reference_image TEXT,
+  approximate_amount DECIMAL(10,2) DEFAULT 0,
+  sizes JSONB DEFAULT '{}',
+  notes TEXT
 );
 
 -- 3. Create users table
