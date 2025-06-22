@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { X, Calendar, DollarSign, FileText, Camera, Ruler, Search, User, AlertTriangle, Package } from 'lucide-react';
-import { Customer, MaterialType, tamilSizeFields, SizeChart, OrderType } from '../types';
+import { X, Calendar, DollarSign, FileText, Camera, Search, User, AlertTriangle, Package } from 'lucide-react';
+import { Customer, MaterialType, OrderType } from '../types';
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -26,20 +26,11 @@ const OrderModal: React.FC<OrderModalProps> = ({
     orderType: 'regular' as OrderType,
     materialType: 'blouse' as MaterialType,
     sizeBookNo: '',
-    hint: '',
     description: '',
     deliveryDate: '',
     approximateAmount: '',
     notes: '',
     referenceImage: ''
-  });
-  
-  const [sizes, setSizes] = useState<SizeChart>(() => {
-    const initialSizes: SizeChart = {};
-    tamilSizeFields.forEach(field => {
-      initialSizes[field.key] = '';
-    });
-    return initialSizes;
   });
 
   useEffect(() => {
@@ -48,14 +39,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
         orderType: order.orderType,
         materialType: order.materialType,
         sizeBookNo: order.sizeBookNo || '',
-        hint: order.hint || '',
         description: order.description,
         deliveryDate: new Date(order.deliveryDate).toISOString().split('T')[0],
         approximateAmount: order.approximateAmount.toString(),
         notes: order.notes,
         referenceImage: order.referenceImage || ''
       });
-      setSizes(order.sizes || {});
     }
   }, [order, mode]);
 
@@ -92,9 +81,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
       orderType: formData.orderType,
       materialType: formData.materialType,
       sizeBookNo: formData.sizeBookNo,
-      hint: formData.hint,
+      hint: '',
       description: formData.description,
-      sizes,
+      sizes: {},
       referenceImage: formData.referenceImage,
       notes: formData.notes,
       deliveryDate,
@@ -114,10 +103,6 @@ const OrderModal: React.FC<OrderModalProps> = ({
       console.error('Error saving order:', error);
       alert('Failed to save order. Please try again.');
     }
-  };
-
-  const handleSizeChange = (key: string, value: string) => {
-    setSizes(prev => ({ ...prev, [key]: value }));
   };
 
   const customerSearchResults = searchCustomers(customerSearchQuery);
@@ -237,34 +222,19 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </div>
           </div>
 
-          {/* Size Book and Hint */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Size Book No. *
-              </label>
-              <input
-                type="text"
-                value={formData.sizeBookNo}
-                onChange={(e) => setFormData({ ...formData, sizeBookNo: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="Enter size book number"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Hint *
-              </label>
-              <input
-                type="text"
-                value={formData.hint}
-                onChange={(e) => setFormData({ ...formData, hint: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="Enter hint for identification"
-                required
-              />
-            </div>
+          {/* Size Book */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Size Book No. *
+            </label>
+            <input
+              type="text"
+              value={formData.sizeBookNo}
+              onChange={(e) => setFormData({ ...formData, sizeBookNo: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              placeholder="Enter size book number"
+              required
+            />
           </div>
 
           {/* Delivery Date and Amount */}
@@ -324,29 +294,6 @@ const OrderModal: React.FC<OrderModalProps> = ({
               placeholder="e.g., Silk blouse with embroidery"
               required
             />
-          </div>
-
-          {/* Size Chart */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Size Chart
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {tamilSizeFields.map(field => (
-                <div key={field.key}>
-                  <label className="block text-xs text-gray-600 mb-1">
-                    {field.tamil} ({field.english})
-                  </label>
-                  <input
-                    type="text"
-                    value={sizes[field.key] || ''}
-                    onChange={(e) => handleSizeChange(field.key, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="--"
-                  />
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Notes */}

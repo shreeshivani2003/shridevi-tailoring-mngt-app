@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { 
   Calendar, 
@@ -23,6 +24,7 @@ const ORDER_CATEGORIES = [
 ];
 
 const Orders: React.FC = () => {
+  const navigate = useNavigate();
   const { orders, customers, searchOrders, loading } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -137,9 +139,7 @@ const Orders: React.FC = () => {
   };
 
   const handleOrderClick = (order: any) => {
-    setSelectedOrder(order);
-    setModalMode('view');
-    setIsModalOpen(true);
+    navigate(`/orders/${order.orderId}`);
   };
 
   const handleAddOrder = () => {

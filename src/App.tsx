@@ -7,6 +7,7 @@ import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import Customers from './components/Customers';
 import Orders from './components/Orders';
+import OrderDetail from './components/OrderDetail';
 import Status from './components/Status';
 import SizeChart from './components/SizeChart';
 import SuperAdmin from './components/SuperAdmin';
@@ -75,10 +76,26 @@ const AppRoutes: React.FC = () => {
           } 
         />
         <Route 
+          path="customers/:customerId" 
+          element={
+            <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
+              <Customers />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="orders" 
           element={
             <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
               <Orders />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="orders/:orderId" 
+          element={
+            <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
+              <OrderDetail />
             </ProtectedRoute>
           } 
         />
