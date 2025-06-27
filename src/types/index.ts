@@ -21,7 +21,7 @@ export interface Customer {
 
 export type MaterialType = 'blouse' | 'chudi' | 'saree' | 'works' | 'others';
 
-export type OrderType = 'regular' | 'emergency';
+export type OrderType = 'regular' | 'emergency' | 'alter';
 
 export interface Order {
   id: string;
@@ -77,3 +77,21 @@ export const tamilSizeFields = [
   { key: 'pant', tamil: 'பேண்ட்', english: 'Pant' },
   { key: 'salwarLength', tamil: 'சல்வார் நீளம்', english: 'Salwar Length' }
 ];
+
+// New interface for order creation with number of items
+export interface OrderCreationData {
+  customerId: string;
+  customerName: string;
+  orderType: OrderType;
+  materialType: MaterialType;
+  sizeBookNo: string;
+  hint: string;
+  description: string;
+  referenceImage?: string;
+  notes: string;
+  deliveryDate: Date;
+  givenDate: Date;
+  approximateAmount: number;
+  numberOfItems: number;
+  editDeliveryDate?: boolean;
+}

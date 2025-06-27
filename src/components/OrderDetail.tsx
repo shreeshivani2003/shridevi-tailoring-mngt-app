@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { 
   ArrowLeft, 
   Phone, 
@@ -16,14 +17,19 @@ import {
   Image as ImageIcon,
   CheckCircle,
   Clock,
-  History
+  History,
+  Edit,
+  Copy,
+  Trash2,
+  CheckSquare
 } from 'lucide-react';
 import { Order, Customer, MaterialType, materialStages } from '../types';
 
 const OrderDetail: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
-  const { orders, customers } = useData();
+  const { orders, customers, deleteOrder, updateOrderStatus } = useData();
+  const { user } = useAuth();
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -31,6 +37,7 @@ const OrderDetail: React.FC = () => {
   const order = orders.find(o => o.orderId === orderId);
   const customer = order ? customers.find(c => c.id === order.customerId) : null;
   const customerOrders = customer && order ? orders.filter(o => o.customerId === customer.id && o.id !== order.id) : [];
+  const isSuperAdmin = user?.role === 'super_admin';
 
   if (!order || !customer) {
     return (
@@ -104,6 +111,46 @@ const OrderDetail: React.FC = () => {
     );
   };
 
+  const handleDuplicateOrder = () => {
+    // Navigate to add order with pre-filled data
+    navigate('/orders/add', { 
+      state: { 
+        duplicateFrom: order,
+        customer: customer 
+      } 
+    });
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!isSuperAdmin) {
+      alert('Only Super Admin can delete orders');
+      return;
+    }
+    
+    if (confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
+      try {
+        await deleteOrder(order.id);
+        alert('Order deleted successfully');
+        navigate('/orders');
+      } catch (error) {
+        console.error('Error deleting order:', error);
+        alert('Failed to delete order');
+      }
+    }
+  };
+
+  const handleMarkAsDelivered = async () => {
+    if (confirm('Mark this order as delivered?')) {
+      try {
+        await updateOrderStatus(order.orderId, 'Delivery', 'Order marked as delivered');
+        alert('Order marked as delivered successfully');
+      } catch (error) {
+        console.error('Error marking order as delivered:', error);
+        alert('Failed to mark order as delivered');
+      }
+    }
+  };
+
   const stages = getStagesForMaterial(order.materialType);
   const currentStageIndex = getCurrentStageIndex(stages);
   const isFinal = isFinalStage(stages);
@@ -128,12 +175,53 @@ const OrderDetail: React.FC = () => {
             </div>
             
             {/* Order Type Badge */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                order.orderType === 'emergency' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+                order.orderType === 'emergency' ? 'bg-red-100 text-red-800' : 
+                order.orderType === 'alter' ? 'bg-purple-100 text-purple-800' :
+                'bg-blue-100 text-blue-800'
               }`}>
                 {order.orderType}
               </span>
+              
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => navigate(`/orders/${order.orderId}/edit`)}
+                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Edit Order"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                
+                <button
+                  onClick={() => handleDuplicateOrder()}
+                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  title="Duplicate Order"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => handleDeleteOrder()}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Delete Order"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+                
+                {!order.isDelivered && (
+                  <button
+                    onClick={() => handleMarkAsDelivered()}
+                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                    title="Mark as Delivered"
+                  >
+                    <CheckSquare className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -160,7 +248,9 @@ const OrderDetail: React.FC = () => {
                   <div>
                     <p className="text-sm text-gray-500">Order Type</p>
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      order.orderType === 'emergency' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+                      order.orderType === 'emergency' ? 'bg-red-100 text-red-800' : 
+                      order.orderType === 'alter' ? 'bg-purple-100 text-purple-800' :
+                      'bg-blue-100 text-blue-800'
                     }`}>
                       {order.orderType}
                     </span>

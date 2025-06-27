@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { X, Calendar, DollarSign, FileText, Camera, Search, User, AlertTriangle, Package } from 'lucide-react';
+import { X, Calendar, DollarSign, FileText, Camera, Search, User, AlertTriangle, Package, Scissors } from 'lucide-react';
 import { Customer, MaterialType, OrderType } from '../types';
 
 interface OrderModalProps {
@@ -18,7 +18,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
   order, 
   mode = 'add' 
 }) => {
-  const { addOrder, updateOrder, searchCustomers } = useData();
+  const { addMultipleOrders, updateOrder, searchCustomers } = useData();
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(initialCustomer || null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [showCustomerResults, setShowCustomerResults] = useState(false);
@@ -30,8 +30,11 @@ const OrderModal: React.FC<OrderModalProps> = ({
     deliveryDate: '',
     approximateAmount: '',
     notes: '',
-    referenceImage: ''
+    referenceImage: '',
+    numberOfItems: 1,
+    editDeliveryDate: false
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (order && mode === 'edit') {
@@ -43,10 +46,26 @@ const OrderModal: React.FC<OrderModalProps> = ({
         deliveryDate: new Date(order.deliveryDate).toISOString().split('T')[0],
         approximateAmount: order.approximateAmount.toString(),
         notes: order.notes,
-        referenceImage: order.referenceImage || ''
+        referenceImage: order.referenceImage || '',
+        numberOfItems: order.numberOfItems || 1,
+        editDeliveryDate: false
+      });
+    } else if (mode === 'add') {
+      // Reset form for new orders
+      setFormData({
+        orderType: 'regular' as OrderType,
+        materialType: 'blouse' as MaterialType,
+        sizeBookNo: '',
+        description: '',
+        deliveryDate: '',
+        approximateAmount: '',
+        notes: '',
+        referenceImage: '',
+        numberOfItems: 1,
+        editDeliveryDate: false
       });
     }
-  }, [order, mode]);
+  }, [order, mode, isOpen]);
 
   const handleCustomerSearch = (query: string) => {
     setCustomerSearchQuery(query);
@@ -67,51 +86,66 @@ const OrderModal: React.FC<OrderModalProps> = ({
       return;
     }
 
-    const givenDate = new Date();
-    let deliveryDate: Date;
-    
-    // For regular orders, set delivery date to 7 days after given date
-    if (formData.orderType === 'regular') {
-      deliveryDate = new Date();
-      deliveryDate.setDate(givenDate.getDate() + 7);
-    } else {
-      // For emergency orders, use the selected delivery date
-      if (!formData.deliveryDate) {
-        alert('Please select a delivery date for emergency orders');
-        return;
-      }
-      deliveryDate = new Date(formData.deliveryDate);
-    }
-
-    const orderData = {
-      customerId: selectedCustomer.id,
-      customerName: selectedCustomer.name,
-      orderType: formData.orderType,
-      materialType: formData.materialType,
-      sizeBookNo: formData.sizeBookNo,
-      hint: '',
-      description: formData.description,
-      sizes: {},
-      referenceImage: formData.referenceImage,
-      notes: formData.notes,
-      deliveryDate,
-      givenDate,
-      approximateAmount: parseFloat(formData.approximateAmount) || 0
-    };
-
-    console.log('Submitting order data:', {
-      orderType: formData.orderType,
-      deliveryDate: deliveryDate.toISOString(),
-      givenDate: givenDate.toISOString(),
-      customerId: selectedCustomer.id,
-      customerName: selectedCustomer.name
-    });
+    setIsSubmitting(true);
 
     try {
+      const givenDate = new Date();
+      let deliveryDate: Date;
+      
+      // For regular orders, set delivery date to 7 days after given date
+      if (formData.orderType === 'regular') {
+        if (formData.editDeliveryDate && formData.deliveryDate) {
+          // If edit delivery date is checked, use the selected date
+          deliveryDate = new Date(formData.deliveryDate);
+        } else {
+          // Default to 7 days for regular orders
+          deliveryDate = new Date();
+          deliveryDate.setDate(givenDate.getDate() + 7);
+        }
+      } else if (formData.orderType === 'alter') {
+        // For alter orders, allow editing delivery date
+        if (formData.editDeliveryDate && formData.deliveryDate) {
+          deliveryDate = new Date(formData.deliveryDate);
+        } else {
+          // Default to 7 days for alter orders if not edited
+          deliveryDate = new Date();
+          deliveryDate.setDate(givenDate.getDate() + 7);
+        }
+      } else {
+        // For emergency orders, use the selected delivery date
+        if (!formData.deliveryDate) {
+          alert('Please select a delivery date for emergency orders');
+          setIsSubmitting(false);
+          return;
+        }
+        deliveryDate = new Date(formData.deliveryDate);
+      }
+
+      const orderData = {
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        orderType: formData.orderType,
+        materialType: formData.materialType,
+        sizeBookNo: formData.sizeBookNo,
+        hint: '',
+        description: formData.description,
+        referenceImage: formData.referenceImage,
+        notes: formData.notes,
+        deliveryDate,
+        givenDate,
+        approximateAmount: parseFloat(formData.approximateAmount) || 0,
+        numberOfItems: formData.numberOfItems,
+        editDeliveryDate: formData.editDeliveryDate
+      };
+
+      console.log('Submitting order data:', orderData);
+
       if (mode === 'add') {
-        await addOrder(orderData);
+        await addMultipleOrders(orderData);
+        alert(`Successfully created ${formData.numberOfItems} order(s)!`);
       } else if (mode === 'edit' && order) {
         await updateOrder(order.id, orderData);
+        alert('Order updated successfully!');
       }
       
       onClose();
@@ -136,6 +170,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
       }
       
       alert(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -202,12 +238,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
           )}
 
           {/* Order Type Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Order Type *
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, orderType: 'regular' })}
@@ -234,6 +270,19 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   <span className="font-medium">Emergency</span>
                   <p className="text-xs text-gray-500 mt-1">Custom delivery</p>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, orderType: 'alter' })}
+                  className={`p-4 rounded-lg border-2 text-center transition-all ${
+                    formData.orderType === 'alter'
+                      ? 'border-purple-500 bg-purple-50 text-purple-700'
+                      : 'border-gray-200 hover:border-purple-200'
+                  }`}
+                >
+                  <Scissors className="w-6 h-6 mx-auto mb-2" />
+                  <span className="font-medium">Alter</span>
+                  <p className="text-xs text-gray-500 mt-1">Editable delivery</p>
+                </button>
               </div>
             </div>
 
@@ -253,6 +302,22 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 <option value="works">Works</option>
                 <option value="others">Others</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                No. of Items *
+              </label>
+              <input
+                type="number"
+                value={formData.numberOfItems}
+                onChange={(e) => setFormData({ ...formData, numberOfItems: Math.max(1, Math.min(35, parseInt(e.target.value) || 1)) })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                placeholder="1-35"
+                min="1"
+                max="35"
+                required
+              />
             </div>
           </div>
 
@@ -275,24 +340,35 @@ const OrderModal: React.FC<OrderModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                {formData.orderType === 'regular' ? 'Expected Delivery Date' : 'Delivery Date'} *
+                {formData.orderType === 'regular' ? 'Expected Delivery Date' : 
+                 formData.orderType === 'alter' ? 'Delivery Date' : 'Delivery Date'} *
               </label>
               <div className="relative">
                 <Calendar className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
                 <input
                   type="date"
-                  value={formData.deliveryDate}
+                  value={formData.orderType === 'regular' && !formData.editDeliveryDate 
+                    ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                    : formData.deliveryDate
+                  }
                   onChange={(e) => setFormData({ ...formData, deliveryDate: e.target.value })}
                   className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent ${
-                    formData.orderType === 'regular' ? 'bg-gray-50 cursor-not-allowed' : ''
+                    (formData.orderType === 'regular' && !formData.editDeliveryDate) ? 'bg-gray-50 cursor-not-allowed' : ''
                   }`}
-                  disabled={formData.orderType === 'regular'}
-                  required={formData.orderType !== 'regular'}
+                  disabled={(formData.orderType === 'regular' && !formData.editDeliveryDate)}
+                  required={formData.orderType === 'emergency' || 
+                           (formData.orderType === 'regular' && formData.editDeliveryDate) ||
+                           (formData.orderType === 'alter' && formData.editDeliveryDate)}
                 />
               </div>
-              {formData.orderType === 'regular' && (
+              {formData.orderType === 'regular' && !formData.editDeliveryDate && (
                 <p className="text-sm text-gray-500 mt-1">
                   Delivery date will be automatically set to 7 days from given date
+                </p>
+              )}
+              {(formData.orderType === 'regular' || formData.orderType === 'alter') && !formData.editDeliveryDate && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Check "Edit Delivery Date" to set a custom delivery date
                 </p>
               )}
             </div>
@@ -347,6 +423,22 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </div>
           </div>
 
+          {/* Edit Delivery Date for Regular and Alter Orders */}
+          {(formData.orderType === 'regular' || formData.orderType === 'alter') && (
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="editDeliveryDate"
+                checked={formData.editDeliveryDate}
+                onChange={(e) => setFormData({ ...formData, editDeliveryDate: e.target.checked })}
+                className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+              />
+              <label htmlFor="editDeliveryDate" className="text-sm font-medium text-gray-700">
+                Edit Delivery Date?
+              </label>
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="flex justify-end gap-3 pt-6 border-t">
             <button
@@ -358,9 +450,17 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </button>
             <button
               type="submit"
-              className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-6 py-3 rounded-lg font-medium hover:from-pink-600 hover:to-rose-600 transition-all transform hover:scale-105"
+              disabled={isSubmitting}
+              className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-6 py-3 rounded-lg font-medium hover:from-pink-600 hover:to-rose-600 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {mode === 'add' ? 'Create Order' : mode === 'edit' ? 'Update Order' : 'View Order'}
+              {isSubmitting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  {mode === 'add' ? 'Creating...' : 'Updating...'}
+                </>
+              ) : (
+                mode === 'add' ? 'Create Order' : mode === 'edit' ? 'Update Order' : 'View Order'
+              )}
             </button>
           </div>
         </form>

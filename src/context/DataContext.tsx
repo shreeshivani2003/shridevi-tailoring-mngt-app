@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Customer, Order, MaterialType, OrderType, materialStages } from '../types';
+import { Customer, Order, MaterialType, OrderType, materialStages, OrderCreationData } from '../types';
 import { supabase, isSupabaseReady } from '../lib/supabase';
 
 interface DataContextType {
@@ -9,6 +9,7 @@ interface DataContextType {
   updateCustomer: (id: string, customer: Partial<Customer>) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
   addOrder: (order: Omit<Order, 'id' | 'orderId' | 'createdAt' | 'currentStatus' | 'statusHistory' | 'isDelivered'>) => Promise<void>;
+  addMultipleOrders: (orderData: OrderCreationData) => Promise<void>;
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
   updateOrderStatus: (orderId: string, newStatus: string, notes?: string) => Promise<void>;
@@ -538,6 +539,94 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
   };
 
+  const addMultipleOrders = async (orderData: OrderCreationData) => {
+    try {
+      // Check if Supabase is configured
+      if (!isSupabaseReady) {
+        throw new Error('Supabase not configured. Please create a .env file with your Supabase credentials.');
+      }
+
+      const baseOrderId = generateOrderId(orderData.orderType);
+      const initialStatus = 'Order Received';
+      const ordersToCreate = [];
+
+      // Create multiple orders based on numberOfItems
+      for (let i = 0; i < orderData.numberOfItems; i++) {
+        const orderId = i === 0 ? baseOrderId : `${baseOrderId}-${i + 1}`;
+        
+        const newOrder = {
+          id: (Date.now() + i).toString(),
+          order_id: orderId,
+          customer_id: orderData.customerId,
+          customer_name: orderData.customerName,
+          order_type: orderData.orderType,
+          material_type: orderData.materialType,
+          size_book_no: orderData.sizeBookNo,
+          hint: orderData.hint || '',
+          description: orderData.description,
+          sizes: {},
+          reference_image: orderData.referenceImage || null,
+          notes: orderData.notes,
+          delivery_date: orderData.deliveryDate.toISOString(),
+          given_date: orderData.givenDate.toISOString(),
+          approximate_amount: orderData.approximateAmount,
+          created_at: new Date().toISOString(),
+          current_status: initialStatus,
+          status_history: [{
+            stage: initialStatus,
+            completed_at: new Date().toISOString(),
+            notes: 'Order created'
+          }],
+          is_delivered: false
+        };
+
+        ordersToCreate.push(newOrder);
+      }
+
+      console.log(`Attempting to insert ${ordersToCreate.length} orders`);
+
+      const { data, error } = await supabase
+        .from('orders')
+        .insert(ordersToCreate)
+        .select();
+
+      if (error) {
+        console.error('Supabase error adding orders:', error);
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      console.log('Orders inserted successfully:', data);
+
+      // Map back to our app's format and add to state
+      const mappedOrders: Order[] = (data || []).map((order: any) => ({
+        id: order.id,
+        orderId: order.order_id,
+        customerId: order.customer_id,
+        customerName: order.customer_name,
+        materialType: order.material_type,
+        description: order.description,
+        orderType: order.order_type,
+        givenDate: new Date(order.given_date),
+        deliveryDate: new Date(order.delivery_date),
+        currentStatus: order.current_status,
+        statusHistory: order.status_history || [],
+        isDelivered: order.is_delivered,
+        createdAt: new Date(order.created_at),
+        sizes: order.sizes || {},
+        referenceImage: order.reference_image,
+        notes: order.notes,
+        approximateAmount: order.approximate_amount || 0,
+        sizeBookNo: order.size_book_no,
+        hint: order.hint
+      }));
+
+      setOrders(prev => [...mappedOrders, ...prev]);
+    } catch (error) {
+      console.error('Error adding multiple orders:', error);
+      throw error;
+    }
+  };
+
   return (
     <DataContext.Provider value={{
       customers,
@@ -553,7 +642,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       searchCustomers,
       getCustomersWithOrderCounts,
       getCustomerOrderCount,
-      loading
+      loading,
+      addMultipleOrders
     }}>
       {children}
     </DataContext.Provider>
