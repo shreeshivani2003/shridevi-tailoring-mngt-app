@@ -142,8 +142,18 @@ const OrderDetail: React.FC = () => {
   const handleMarkAsDelivered = async () => {
     if (confirm('Mark this order as delivered?')) {
       try {
-        await updateOrderStatus(order.orderId, 'Delivery', 'Order marked as delivered');
+        const result = await updateOrderStatus(order.orderId, 'Delivery', 'Order marked as delivered');
         alert('Order marked as delivered successfully');
+        
+        // If this was the final stage, show WhatsApp message info
+        if (result.isFinalStage) {
+          const phone = customer?.phone || '';
+          const defaultMessage = `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!`;
+          
+          // Open WhatsApp with the message
+          const url = `https://wa.me/${phone}?text=${encodeURIComponent(defaultMessage)}`;
+          window.open(url, '_blank');
+        }
       } catch (error) {
         console.error('Error marking order as delivered:', error);
         alert('Failed to mark order as delivered');
@@ -156,78 +166,16 @@ const OrderDetail: React.FC = () => {
   const isFinal = isFinalStage(stages);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate('/orders')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Order #{order.orderId}</h1>
-                <p className="text-gray-600">{customer.name}</p>
-              </div>
-            </div>
-            
-            {/* Order Type Badge */}
-            <div className="flex items-center gap-4">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                order.orderType === 'emergency' ? 'bg-red-100 text-red-800' : 
-                order.orderType === 'alter' ? 'bg-purple-100 text-purple-800' :
-                'bg-blue-100 text-blue-800'
-              }`}>
-                {order.orderType}
-              </span>
-              
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => navigate(`/orders/${order.orderId}/edit`)}
-                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="Edit Order"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                
-                <button
-                  onClick={() => handleDuplicateOrder()}
-                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                  title="Duplicate Order"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-                
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => handleDeleteOrder()}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Delete Order"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-                
-                {!order.isDelivered && (
-                  <button
-                    onClick={() => handleMarkAsDelivered()}
-                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                    title="Mark as Delivered"
-                  >
-                    <CheckSquare className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-rose-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Back Button */}
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 mb-4 px-4 py-2 text-gray-600 hover:bg-pink-50 hover:text-pink-800 rounded transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          <span className="font-medium">Back</span>
+        </button>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Order Details & Customer Info */}
           <div className="lg:col-span-1 space-y-6">

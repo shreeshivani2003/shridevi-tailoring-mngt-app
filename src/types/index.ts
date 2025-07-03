@@ -19,7 +19,7 @@ export interface Customer {
   orders: Order[];
 }
 
-export type MaterialType = 'blouse' | 'chudi' | 'saree' | 'works' | 'others';
+export type MaterialType = 'blouse' | 'chudi' | 'saree' | 'works' | 'others' | 'lehenga' | 'lahenga';
 
 export type OrderType = 'regular' | 'emergency' | 'alter';
 
@@ -56,11 +56,13 @@ export interface SizeChart {
 }
 
 export const materialStages: Record<MaterialType, string[]> = {
-  blouse: ['Checking', 'Cutting', 'Stitching', 'Hemming', 'Checking', 'Delivery'],
-  chudi: ['Checking', 'Cutting', 'Stitching', 'Checking', 'Delivery'],
-  works: ['Checking', 'Marking', 'Work', 'Cutting', 'Stitching', 'Hemming', 'Checking', 'Delivery'],
-  saree: ['Checking', 'In Process', 'Delivery'],
-  others: ['Cutting', 'In Process', 'Delivery']
+  blouse: ['Initial Checking', 'Cutting', 'Stitching', 'Hemming', 'Final Checking', 'Delivery'],
+  chudi: ['Initial Checking', 'Cutting', 'Stitching', 'Final Checking', 'Delivery'],
+  works: ['Initial Checking', 'Marking', 'Work', 'Cutting', 'Stitching', 'Hemming', 'Final Checking', 'Delivery'],
+  saree: ['Initial Checking', 'In Process', 'Delivery'],
+  others: ['Cutting', 'In Process', 'Delivery'],
+  lehenga: ['Initial Checking', 'Cutting', 'Stitching', 'Hemming', 'Final Checking', 'Delivery'],
+  lahenga: ['Initial Checking', 'Cutting', 'Stitching', 'Hemming', 'Final Checking', 'Delivery'],
 };
 
 export const tamilSizeFields = [

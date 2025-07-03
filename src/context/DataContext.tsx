@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Customer, Order, MaterialType, OrderType, materialStages, OrderCreationData } from '../types';
 import { supabase, isSupabaseReady } from '../lib/supabase';
+import { checkMigrationNeeded, migrateOrderStatuses } from '../utils/statusMigration';
 
 interface DataContextType {
   customers: Customer[];
@@ -12,11 +13,13 @@ interface DataContextType {
   addMultipleOrders: (orderData: OrderCreationData) => Promise<void>;
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
-  updateOrderStatus: (orderId: string, newStatus: string, notes?: string) => Promise<void>;
+  updateOrderStatus: (orderId: string, newStatus: string, notes?: string) => Promise<{ order: Order; isFinalStage: boolean; nextStatus: string }>;
   searchOrders: (query: string) => Order[];
   searchCustomers: (query: string) => Customer[];
   getCustomersWithOrderCounts: () => (Customer & { orderCount: number })[];
   getCustomerOrderCount: (customerId: string) => number;
+  getDeliveredOrders: () => Order[];
+  getReadyForDeliveryOrders: () => Order[];
   loading: boolean;
 }
 
@@ -35,10 +38,12 @@ const generateCustomerId = () => {
 };
 
 const generateOrderId = (orderType: OrderType) => {
-  const prefix = orderType === 'regular' ? 'ORD' : 'EMG';
-  const timestamp = Date.now().toString().slice(-6);
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  return `${prefix}${timestamp}${random}`;
+  // Shorter, simpler order ID: ORD12345 or EMG12345 or ALT12345
+  let prefix = 'ORD';
+  if (orderType === 'emergency') prefix = 'EMG';
+  if (orderType === 'alter') prefix = 'ALT';
+  const random = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
+  return `${prefix}${random}`;
 };
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -52,23 +57,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loadData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      
-      // First, check if the orders table has all required columns
-      const { data: schemaCheck, error: schemaError } = await supabase
-        .from('orders')
-        .select('id, order_id, customer_id, customer_name, material_type, description, order_type, given_date, delivery_date, current_status, status_history, is_delivered, created_at, size_book_no, hint, reference_image, approximate_amount, sizes, notes')
-        .limit(1);
-
-      if (schemaError) {
-        console.error('Schema check failed:', schemaError);
-        console.error('This might indicate missing columns in the orders table.');
-        console.error('Please run the updated schema from supabase-schema.sql');
-      } else {
-        console.log('Database schema check passed');
+      // Check if Supabase is configured
+      if (!isSupabaseReady) {
+        console.warn('Supabase not configured. Please create a .env file with your Supabase credentials.');
+        setLoading(false);
+        return;
       }
-      
+
+      // Check if migration is needed and run it
+      const needsMigration = await checkMigrationNeeded();
+      if (needsMigration) {
+        console.log('Status migration needed, running migration...');
+        await migrateOrderStatuses();
+      }
+
       // Load customers
       const { data: customersData, error: customersError } = await supabase
         .from('customers')
@@ -77,63 +81,56 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (customersError) {
         console.error('Error loading customers:', customersError);
-        throw customersError;
+      } else {
+        const mappedCustomers: Customer[] = (customersData || []).map((customer: any) => ({
+          id: customer.id,
+          name: customer.name,
+          customerId: customer.customer_id,
+          phone: customer.phone,
+          whatsappNumber: customer.whatsapp_number,
+          whatsappEnabled: customer.whatsapp_enabled,
+          address: customer.address,
+          notes: customer.notes,
+          createdAt: new Date(customer.created_at),
+          orders: []
+        }));
+        setCustomers(mappedCustomers);
       }
-
-      // Map Supabase data to our app format
-      const mappedCustomers = (customersData || []).map((customer: any) => ({
-        id: customer.id,
-        customerId: customer.customer_id,
-        name: customer.name,
-        phone: customer.phone,
-        whatsappNumber: customer.whatsapp_number,
-        whatsappEnabled: customer.whatsapp_enabled,
-        address: customer.address,
-        notes: customer.notes,
-        createdAt: new Date(customer.created_at),
-        orders: []
-      }));
-      setCustomers(mappedCustomers);
 
       // Load orders
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('*')
+        .select('id, order_id, customer_id, customer_name, material_type, description, order_type, given_date, delivery_date, current_status, status_history, is_delivered, created_at, size_book_no, hint, reference_image, approximate_amount, sizes, notes')
         .order('created_at', { ascending: false });
 
       if (ordersError) {
         console.error('Error loading orders:', ordersError);
-        throw ordersError;
+      } else {
+        const mappedOrders: Order[] = (ordersData || []).map((order: any) => ({
+          id: order.id,
+          orderId: order.order_id,
+          customerId: order.customer_id,
+          customerName: order.customer_name,
+          materialType: order.material_type,
+          description: order.description,
+          orderType: order.order_type,
+          givenDate: new Date(order.given_date),
+          deliveryDate: new Date(order.delivery_date),
+          currentStatus: order.current_status,
+          statusHistory: order.status_history || [],
+          isDelivered: order.is_delivered,
+          createdAt: new Date(order.created_at),
+          sizes: order.sizes || {},
+          referenceImage: order.reference_image,
+          notes: order.notes,
+          approximateAmount: order.approximate_amount || 0,
+          sizeBookNo: order.size_book_no,
+          hint: order.hint
+        }));
+        setOrders(mappedOrders);
       }
-
-      // Map Supabase data to our app format
-      const mappedOrders = (ordersData || []).map((order: any) => ({
-        id: order.id,
-        orderId: order.order_id,
-        customerId: order.customer_id,
-        customerName: order.customer_name,
-        materialType: order.material_type,
-        description: order.description,
-        orderType: order.order_type,
-        givenDate: new Date(order.given_date),
-        deliveryDate: new Date(order.delivery_date),
-        currentStatus: order.current_status,
-        statusHistory: order.status_history || [],
-        isDelivered: order.is_delivered,
-        createdAt: new Date(order.created_at),
-        sizes: order.sizes || {},
-        referenceImage: order.reference_image,
-        notes: order.notes,
-        approximateAmount: order.approximate_amount || 0,
-        sizeBookNo: order.size_book_no,
-        hint: order.hint
-      }));
-      setOrders(mappedOrders);
     } catch (error) {
       console.error('Error loading data:', error);
-      // Set empty arrays on error
-      setCustomers([]);
-      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -446,21 +443,54 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('Order not found');
       }
 
+      // Get the stages for this material type
+      const stages = materialStages[order.materialType as keyof typeof materialStages];
+      if (!stages) {
+        throw new Error('Invalid material type');
+      }
+
+      // Find current stage index, handling old status names
+      let currentIndex = stages.indexOf(order.currentStatus);
+      
+      // If not found, try to migrate old status names
+      if (currentIndex === -1) {
+        currentIndex = migrateOldStatus(order.currentStatus, order.materialType);
+      }
+
+      // If still not found, default to first stage
+      if (currentIndex === -1) {
+        currentIndex = 0;
+      }
+
+      // Determine the next status
+      let nextStatus = newStatus;
+      if (newStatus === 'next') {
+        if (currentIndex < stages.length - 1) {
+          nextStatus = stages[currentIndex + 1];
+        } else {
+          throw new Error('Already at final stage');
+        }
+      }
+
+      // Check if this is the final stage (Delivery)
+      const isFinalStage = nextStatus === 'Delivery';
+      const isDelivered = isFinalStage;
+
       const newStatusHistory = [
         ...order.statusHistory,
         {
-          stage: newStatus,
+          stage: nextStatus,
           completed_at: new Date().toISOString(),
-          notes
+          notes: notes || (isFinalStage ? 'Order completed and ready for delivery' : `Moved to ${nextStatus}`)
         }
       ];
 
       const { data, error } = await supabase
         .from('orders')
         .update({
-          current_status: newStatus,
+          current_status: nextStatus,
           status_history: newStatusHistory,
-          is_delivered: newStatus === 'Delivery'
+          is_delivered: isDelivered
         })
         .eq('order_id', orderId)
         .select()
@@ -497,10 +527,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setOrders(prev => prev.map(order => 
         order.orderId === orderId ? mappedOrder : order
       ));
+
+      // Return information about the update for UI handling
+      return {
+        order: mappedOrder,
+        isFinalStage,
+        nextStatus
+      };
     } catch (error) {
       console.error('Error updating order status:', error);
       throw error;
     }
+  };
+
+  // Helper function to migrate old status names to new ones
+  const migrateOldStatus = (oldStatus: string, materialType: MaterialType): number => {
+    const stages = materialStages[materialType];
+    
+    // Handle old "Checking" status migration
+    if (oldStatus === 'Checking') {
+      // Check if this is likely the first or second checking based on context
+      // For now, we'll assume it's the first checking and migrate to "Initial Checking"
+      return stages.indexOf('Initial Checking');
+    }
+    
+    // Handle other potential old status names
+    const statusMappings: Record<string, string> = {
+      'Order Received': 'Initial Checking',
+      'In Progress': 'In Process',
+      'Final Check': 'Final Checking',
+      'Final Inspection': 'Final Checking'
+    };
+    
+    const mappedStatus = statusMappings[oldStatus];
+    if (mappedStatus) {
+      return stages.indexOf(mappedStatus);
+    }
+    
+    return -1; // Not found
   };
 
   const searchOrders = (query: string): Order[] => {
@@ -541,19 +605,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addMultipleOrders = async (orderData: OrderCreationData) => {
     try {
-      // Check if Supabase is configured
       if (!isSupabaseReady) {
         throw new Error('Supabase not configured. Please create a .env file with your Supabase credentials.');
       }
-
-      const baseOrderId = generateOrderId(orderData.orderType);
       const initialStatus = 'Order Received';
       const ordersToCreate = [];
-
-      // Create multiple orders based on numberOfItems
+      const usedIds = new Set();
       for (let i = 0; i < orderData.numberOfItems; i++) {
-        const orderId = i === 0 ? baseOrderId : `${baseOrderId}-${i + 1}`;
-        
+        let orderId;
+        do {
+          orderId = generateOrderId(orderData.orderType);
+        } while (usedIds.has(orderId));
+        usedIds.add(orderId);
         const newOrder = {
           id: (Date.now() + i).toString(),
           order_id: orderId,
@@ -579,25 +642,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }],
           is_delivered: false
         };
-
         ordersToCreate.push(newOrder);
       }
-
       console.log(`Attempting to insert ${ordersToCreate.length} orders`);
-
       const { data, error } = await supabase
         .from('orders')
         .insert(ordersToCreate)
         .select();
-
       if (error) {
         console.error('Supabase error adding orders:', error);
         throw new Error(`Database error: ${error.message}`);
       }
-
       console.log('Orders inserted successfully:', data);
-
-      // Map back to our app's format and add to state
       const mappedOrders: Order[] = (data || []).map((order: any) => ({
         id: order.id,
         orderId: order.order_id,
@@ -619,12 +675,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sizeBookNo: order.size_book_no,
         hint: order.hint
       }));
-
       setOrders(prev => [...mappedOrders, ...prev]);
     } catch (error) {
       console.error('Error adding multiple orders:', error);
       throw error;
     }
+  };
+
+  // Get delivered orders for the delivery bucket
+  const getDeliveredOrders = (): Order[] => {
+    return orders.filter(order => order.isDelivered);
+  };
+
+  // Get orders ready for delivery (completed all stages but not yet delivered)
+  const getReadyForDeliveryOrders = (): Order[] => {
+    return orders.filter(order => {
+      const stages = materialStages[order.materialType as keyof typeof materialStages];
+      const currentIndex = stages.indexOf(order.currentStatus);
+      const isAtFinalStage = currentIndex === stages.length - 1;
+      return isAtFinalStage && !order.isDelivered;
+    });
   };
 
   return (
@@ -642,6 +712,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       searchCustomers,
       getCustomersWithOrderCounts,
       getCustomerOrderCount,
+      getDeliveredOrders,
+      getReadyForDeliveryOrders,
       loading,
       addMultipleOrders
     }}>

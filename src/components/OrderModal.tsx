@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { X, Calendar, DollarSign, FileText, Camera, Search, User, AlertTriangle, Package, Scissors } from 'lucide-react';
 import { Customer, MaterialType, OrderType } from '../types';
+import { useNavigate } from 'react-router-dom';
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
     editDeliveryDate: false
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (order && mode === 'edit') {
@@ -188,7 +190,22 @@ const OrderModal: React.FC<OrderModalProps> = ({
               {mode === 'add' ? 'Add New Order' : mode === 'edit' ? 'Edit Order' : 'View Order'}
             </h2>
             {selectedCustomer && (
-              <p className="text-sm text-pink-600">{selectedCustomer.name} ({selectedCustomer.customerId})</p>
+              <div className="flex gap-2 items-center">
+                <span
+                  className="text-sm text-pink-700 underline cursor-pointer hover:text-pink-900"
+                  onClick={() => navigate(`/customers/${selectedCustomer.id}`)}
+                >
+                  {selectedCustomer.name}
+                </span>
+                {order?.orderId && (
+                  <span
+                    className="text-sm text-blue-700 underline cursor-pointer hover:text-blue-900"
+                    onClick={() => navigate(`/orders/${order.orderId}`)}
+                  >
+                    #{order.orderId}
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <button
@@ -247,7 +264,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, orderType: 'regular' })}
-                  className={`p-4 rounded-lg border-2 text-center transition-all ${
+                  className={`w-full p-4 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center whitespace-normal break-words h-full min-h-[100px] max-w-full ${
                     formData.orderType === 'regular'
                       ? 'border-pink-500 bg-pink-50 text-pink-700'
                       : 'border-gray-200 hover:border-pink-200'
@@ -255,12 +272,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 >
                   <Package className="w-6 h-6 mx-auto mb-2" />
                   <span className="font-medium">Regular</span>
-                  <p className="text-xs text-gray-500 mt-1">7 days delivery</p>
+                  <p className="text-xs text-gray-500 mt-1 text-center">7 days delivery</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, orderType: 'emergency' })}
-                  className={`p-4 rounded-lg border-2 text-center transition-all ${
+                  className={`w-full p-4 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center whitespace-normal break-words h-full min-h-[100px] max-w-full ${
                     formData.orderType === 'emergency'
                       ? 'border-red-500 bg-red-50 text-red-700'
                       : 'border-gray-200 hover:border-red-200'
@@ -268,12 +285,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 >
                   <AlertTriangle className="w-6 h-6 mx-auto mb-2" />
                   <span className="font-medium">Emergency</span>
-                  <p className="text-xs text-gray-500 mt-1">Custom delivery</p>
+                  <p className="text-xs text-gray-500 mt-1 text-center">Custom delivery</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, orderType: 'alter' })}
-                  className={`p-4 rounded-lg border-2 text-center transition-all ${
+                  className={`w-full p-4 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center whitespace-normal break-words h-full min-h-[100px] max-w-full ${
                     formData.orderType === 'alter'
                       ? 'border-purple-500 bg-purple-50 text-purple-700'
                       : 'border-gray-200 hover:border-purple-200'
@@ -281,7 +298,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 >
                   <Scissors className="w-6 h-6 mx-auto mb-2" />
                   <span className="font-medium">Alter</span>
-                  <p className="text-xs text-gray-500 mt-1">Editable delivery</p>
+                  <p className="text-xs text-gray-500 mt-1 text-center">Editable delivery</p>
                 </button>
               </div>
             </div>
@@ -300,6 +317,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 <option value="chudi">Chudi</option>
                 <option value="saree">Saree</option>
                 <option value="works">Works</option>
+                <option value="lahenga">Lahenga</option>
                 <option value="others">Others</option>
               </select>
             </div>
@@ -308,23 +326,42 @@ const OrderModal: React.FC<OrderModalProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 No. of Items *
               </label>
-              <input
-                type="number"
-                value={formData.numberOfItems}
-                onChange={(e) => setFormData({ ...formData, numberOfItems: Math.max(1, Math.min(35, parseInt(e.target.value) || 1)) })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="1-35"
-                min="1"
-                max="35"
-                required
-              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-2 bg-gray-100 rounded-l-lg border border-gray-300 text-lg font-bold hover:bg-pink-100"
+                  onClick={() => setFormData({ ...formData, numberOfItems: Math.max(1, formData.numberOfItems - 1) })}
+                  tabIndex={-1}
+                >
+                  -
+                </button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={formData.numberOfItems}
+                  onChange={(e) => setFormData({ ...formData, numberOfItems: Math.max(1, Math.min(35, parseInt(e.target.value) || 1)) })}
+                  className="w-20 text-center px-2 py-3 border-t border-b border-gray-300 focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  min="1"
+                  max="35"
+                  required
+                />
+                <button
+                  type="button"
+                  className="px-3 py-2 bg-gray-100 rounded-r-lg border border-gray-300 text-lg font-bold hover:bg-pink-100"
+                  onClick={() => setFormData({ ...formData, numberOfItems: Math.min(35, formData.numberOfItems + 1) })}
+                  tabIndex={-1}
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Size Book */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Size Book No. *
+              Size Book No.
             </label>
             <input
               type="text"
@@ -332,7 +369,6 @@ const OrderModal: React.FC<OrderModalProps> = ({
               onChange={(e) => setFormData({ ...formData, sizeBookNo: e.target.value })}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
               placeholder="Enter size book number"
-              required
             />
           </div>
 
@@ -359,6 +395,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   required={formData.orderType === 'emergency' || 
                            (formData.orderType === 'regular' && formData.editDeliveryDate) ||
                            (formData.orderType === 'alter' && formData.editDeliveryDate)}
+                  min={new Date().toISOString().split('T')[0]}
                 />
               </div>
               {formData.orderType === 'regular' && !formData.editDeliveryDate && (
@@ -387,6 +424,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   placeholder="0"
                   min="0"
                 />
+                <p className="text-xs text-gray-500 mt-1 ml-2">Per {formData.materialType ? formData.materialType.charAt(0).toUpperCase() + formData.materialType.slice(1) : 'Material'}</p>
               </div>
             </div>
           </div>

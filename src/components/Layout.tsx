@@ -1,6 +1,8 @@
 import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isFeatureEnabled } from '../config/features';
+import MigrationStatus from './MigrationStatus';
 import { 
   LayoutDashboard, 
   Users, 
@@ -9,7 +11,8 @@ import {
   Settings, 
   LogOut,
   Ruler,
-  Crown
+  Crown,
+  ArrowLeft
 } from 'lucide-react';
 
 const Layout: React.FC = () => {
@@ -23,11 +26,11 @@ const Layout: React.FC = () => {
   };
 
   const navigationItems = [
-    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'admin'] },
+    ...(isFeatureEnabled('DASHBOARD_ENABLED') ? [{ path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'admin'] }] : []),
     { path: '/customers', icon: Users, label: 'Customers', roles: ['super_admin', 'admin'] },
     { path: '/orders', icon: Package, label: 'Orders', roles: ['super_admin', 'admin'] },
     { path: '/status', icon: Activity, label: 'Status', roles: ['super_admin', 'admin', 'user'] },
-    { path: '/size-chart', icon: Ruler, label: 'Size Chart', roles: ['super_admin', 'admin'] },
+    ...(isFeatureEnabled('SIZE_CHART_ENABLED') ? [{ path: '/size-chart', icon: Ruler, label: 'Size Chart', roles: ['super_admin', 'admin'] }] : []),
     { path: '/super-admin', icon: Crown, label: 'Super Admin', roles: ['super_admin'] }
   ];
 
@@ -37,6 +40,9 @@ const Layout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-rose-100">
+      {/* Migration Status Notification */}
+      <MigrationStatus />
+      
       <div className="flex">
         {/* Sidebar */}
         <div className="w-64 bg-white shadow-lg min-h-screen">
@@ -44,7 +50,16 @@ const Layout: React.FC = () => {
             <h1 className="text-2xl font-bold text-pink-800">Shri Devi Tailoring</h1>
             <p className="text-sm text-pink-600 mt-1">Management System</p>
           </div>
-          
+          {/* Back Button */}
+          {location.pathname !== '/' && location.pathname !== '/login' && (
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-pink-50 hover:text-pink-800 transition-colors w-full text-left"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="font-medium">Back</span>
+            </button>
+          )}
           <nav className="mt-6">
             {filteredNavItems.map((item) => {
               const Icon = item.icon;

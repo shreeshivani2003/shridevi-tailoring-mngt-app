@@ -11,6 +11,7 @@ import OrderDetail from './components/OrderDetail';
 import Status from './components/Status';
 import SizeChart from './components/SizeChart';
 import SuperAdmin from './components/SuperAdmin';
+import { isFeatureEnabled } from './config/features';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode, allowedRoles?: string[] }> = ({ 
   children, 
@@ -44,7 +45,7 @@ const AppRoutes: React.FC = () => {
           isAuthenticated ? (
             user?.role === 'user' ? 
               <Navigate to="/status" replace /> : 
-              <Navigate to="/dashboard" replace />
+              <Navigate to="/orders" replace />
           ) : (
             <Login />
           )
@@ -56,17 +57,19 @@ const AppRoutes: React.FC = () => {
           element={
             user?.role === 'user' ? 
               <Navigate to="/status" replace /> : 
-              <Navigate to="/dashboard" replace />
+              <Navigate to="/orders" replace />
           } 
         />
-        <Route 
-          path="dashboard" 
-          element={
-            <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
-              <Dashboard />
-            </ProtectedRoute>
-          } 
-        />
+        {isFeatureEnabled('DASHBOARD_ENABLED') && (
+          <Route 
+            path="dashboard" 
+            element={
+              <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+        )}
         <Route 
           path="customers" 
           element={
@@ -100,14 +103,16 @@ const AppRoutes: React.FC = () => {
           } 
         />
         <Route path="status" element={<Status />} />
-        <Route 
-          path="size-chart" 
-          element={
-            <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
-              <SizeChart />
-            </ProtectedRoute>
-          } 
-        />
+        {isFeatureEnabled('SIZE_CHART_ENABLED') && (
+          <Route 
+            path="size-chart" 
+            element={
+              <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
+                <SizeChart />
+              </ProtectedRoute>
+            } 
+          />
+        )}
         <Route 
           path="super-admin" 
           element={
@@ -118,7 +123,7 @@ const AppRoutes: React.FC = () => {
         />
       </Route>
       <Route path="*" element={
-        <Navigate to={user?.role === 'user' ? "/status" : "/dashboard"} replace />
+        <Navigate to={user?.role === 'user' ? "/status" : "/orders"} replace />
       } />
     </Routes>
   );
