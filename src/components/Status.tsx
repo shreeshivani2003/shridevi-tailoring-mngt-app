@@ -40,7 +40,14 @@ const Status: React.FC = () => {
   // Helper: get all unique status stages
   const allStages = useMemo(() => {
     const stages = new Set<string>();
-    orders.forEach(o => materialStages[o.materialType as keyof typeof materialStages].forEach(s => stages.add(s)));
+    orders.forEach(o => {
+      const stagesArr = materialStages[o.materialType as keyof typeof materialStages];
+      if (stagesArr) {
+        stagesArr.forEach(s => stages.add(s));
+      } else {
+        console.warn('Unknown material type:', o.materialType, o);
+      }
+    });
     return Array.from(stages);
   }, [orders]);
 
@@ -81,6 +88,18 @@ const Status: React.FC = () => {
     });
     return byStage;
   }, [orders, allStages]);
+
+  // Define the fixed order for process tracking
+  const processStages = [
+    'Initial Checking',
+    'Marking',
+    'Cutting',
+    'Work',
+    'Stitching',
+    'In Process',
+    'Hemming',
+    'Final Checking',
+  ];
 
   // Status update logic with automatic WhatsApp
   const handleStatusUpdate = async (order: any) => {
@@ -366,7 +385,7 @@ const Status: React.FC = () => {
         <div className="bg-white rounded-xl shadow-lg p-4">
           <h2 className="text-lg font-bold mb-4">Process Tracking</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {allStages.map(stage => (
+            {processStages.map(stage => (
               <div key={stage} className="bg-gray-50 rounded-lg border p-3">
                 <div className="flex justify-between items-center mb-3">
                   <span className="font-semibold text-gray-700 text-sm">{stage}</span>

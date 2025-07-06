@@ -19,7 +19,7 @@ export interface Customer {
   orders: Order[];
 }
 
-export type MaterialType = 'blouse' | 'chudi' | 'saree' | 'works' | 'others' | 'lehenga' | 'lahenga';
+export type MaterialType = 'blouse' | 'chudi' | 'saree' | 'works' | 'others' | 'lehenga';
 
 export type OrderType = 'regular' | 'emergency' | 'alter';
 
@@ -62,7 +62,6 @@ export const materialStages: Record<MaterialType, string[]> = {
   saree: ['Initial Checking', 'In Process', 'Delivery'],
   others: ['Cutting', 'In Process', 'Delivery'],
   lehenga: ['Initial Checking', 'Cutting', 'Stitching', 'Hemming', 'Final Checking', 'Delivery'],
-  lahenga: ['Initial Checking', 'Cutting', 'Stitching', 'Hemming', 'Final Checking', 'Delivery'],
 };
 
 export const tamilSizeFields = [

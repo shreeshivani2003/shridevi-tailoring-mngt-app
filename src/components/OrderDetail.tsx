@@ -24,6 +24,7 @@ import {
   CheckSquare
 } from 'lucide-react';
 import { Order, Customer, MaterialType, materialStages } from '../types';
+import OrderModal from './OrderModal';
 
 const OrderDetail: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -33,6 +34,8 @@ const OrderDetail: React.FC = () => {
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view');
 
   const order = orders.find(o => o.orderId === orderId);
   const customer = order ? customers.find(c => c.id === order.customerId) : null;
@@ -182,6 +185,14 @@ const OrderDetail: React.FC = () => {
             {/* Order Information */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Information</h2>
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={() => { setIsModalOpen(true); setModalMode('edit'); }}
+                  className="flex items-center gap-1 px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors text-sm"
+                >
+                  <Edit className="w-4 h-4" /> Edit
+                </button>
+              </div>
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <Package className="w-5 h-5 text-gray-400" />
@@ -568,6 +579,14 @@ const OrderDetail: React.FC = () => {
           </div>
         </div>
       </div>
+      {isModalOpen && (
+        <OrderModal
+          isOpen={isModalOpen}
+          order={order}
+          onClose={() => setIsModalOpen(false)}
+          mode={modalMode}
+        />
+      )}
     </div>
   );
 };

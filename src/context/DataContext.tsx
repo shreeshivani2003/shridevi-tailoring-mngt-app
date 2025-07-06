@@ -691,9 +691,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getReadyForDeliveryOrders = (): Order[] => {
     return orders.filter(order => {
       const stages = materialStages[order.materialType as keyof typeof materialStages];
+      if (!stages) {
+        console.warn('Unknown material type in getReadyForDeliveryOrders:', order.materialType, order);
+        return false;
+      }
       const currentIndex = stages.indexOf(order.currentStatus);
-      const isAtFinalStage = currentIndex === stages.length - 1;
-      return isAtFinalStage && !order.isDelivered;
+      return currentIndex === stages.length - 2 && !order.isDelivered;
     });
   };
 

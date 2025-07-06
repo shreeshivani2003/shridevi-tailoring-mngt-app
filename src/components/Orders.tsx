@@ -21,7 +21,6 @@ const ORDER_CATEGORIES = [
   'saree',
   'works',
   'lehenga',
-  'lahenga',
   'chudi',
   'others',
 ];
@@ -222,6 +221,8 @@ const Orders: React.FC = () => {
   const alterGroups = getGroupedOrders('alter', selectedCategory);
   const thisWeeksOrders = getThisWeeksOrders();
   const calendarDays = getCalendarDays();
+
+
 
   return (
     <div className="space-y-6">

@@ -105,11 +105,11 @@ const OrderModal: React.FC<OrderModalProps> = ({
           deliveryDate.setDate(givenDate.getDate() + 7);
         }
       } else if (formData.orderType === 'alter') {
-        // For alter orders, allow editing delivery date
-        if (formData.editDeliveryDate && formData.deliveryDate) {
+        // For alter orders, use the selected delivery date
+        if (formData.deliveryDate) {
           deliveryDate = new Date(formData.deliveryDate);
         } else {
-          // Default to 7 days for alter orders if not edited
+          // Default to 7 days for alter orders if no date selected
           deliveryDate = new Date();
           deliveryDate.setDate(givenDate.getDate() + 7);
         }
@@ -317,7 +317,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 <option value="chudi">Chudi</option>
                 <option value="saree">Saree</option>
                 <option value="works">Works</option>
-                <option value="lahenga">Lahenga</option>
+                <option value="lehenga">Lehenga</option>
                 <option value="others">Others</option>
               </select>
             </div>
@@ -383,19 +383,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 <Calendar className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
                 <input
                   type="date"
-                  value={formData.orderType === 'regular' && !formData.editDeliveryDate 
-                    ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-                    : formData.deliveryDate
-                  }
+                  value={formData.deliveryDate}
                   onChange={(e) => setFormData({ ...formData, deliveryDate: e.target.value })}
-                  className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent ${
-                    (formData.orderType === 'regular' && !formData.editDeliveryDate) ? 'bg-gray-50 cursor-not-allowed' : ''
-                  }`}
-                  disabled={(formData.orderType === 'regular' && !formData.editDeliveryDate)}
-                  required={formData.orderType === 'emergency' || 
-                           (formData.orderType === 'regular' && formData.editDeliveryDate) ||
-                           (formData.orderType === 'alter' && formData.editDeliveryDate)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  required={formData.orderType === 'emergency' || formData.orderType === 'alter' || (formData.orderType === 'regular' && formData.editDeliveryDate)}
                   min={new Date().toISOString().split('T')[0]}
+                  disabled={formData.orderType === 'regular' && !formData.editDeliveryDate}
                 />
               </div>
               {formData.orderType === 'regular' && !formData.editDeliveryDate && (
@@ -403,7 +396,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   Delivery date will be automatically set to 7 days from given date
                 </p>
               )}
-              {(formData.orderType === 'regular' || formData.orderType === 'alter') && !formData.editDeliveryDate && (
+              {formData.orderType === 'regular' && !formData.editDeliveryDate && (
                 <p className="text-sm text-gray-500 mt-1">
                   Check "Edit Delivery Date" to set a custom delivery date
                 </p>
@@ -461,8 +454,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </div>
           </div>
 
-          {/* Edit Delivery Date for Regular and Alter Orders */}
-          {(formData.orderType === 'regular' || formData.orderType === 'alter') && (
+          {/* Edit Delivery Date for Regular Orders Only */}
+          {formData.orderType === 'regular' && (
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
