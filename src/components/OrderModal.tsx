@@ -229,7 +229,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   type="text"
                   value={customerSearchQuery}
                   onChange={(e) => handleCustomerSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
                   placeholder="Search by customer name, phone number, or ID..."
                 />
               </div>
@@ -310,7 +310,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               <select
                 value={formData.materialType}
                 onChange={(e) => setFormData({ ...formData, materialType: e.target.value as MaterialType })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
                 required
               >
                 <option value="blouse">Blouse</option>
@@ -329,7 +329,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="px-3 py-2 bg-gray-100 rounded-l-lg border border-gray-300 text-lg font-bold hover:bg-pink-100"
+                  className="px-3 py-2 bg-gray-100 rounded-l-lg border border-gray-300 text-lg font-bold hover:border-pink-200"
                   onClick={() => setFormData({ ...formData, numberOfItems: Math.max(1, formData.numberOfItems - 1) })}
                   tabIndex={-1}
                 >
@@ -341,14 +341,14 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   pattern="[0-9]*"
                   value={formData.numberOfItems}
                   onChange={(e) => setFormData({ ...formData, numberOfItems: Math.max(1, Math.min(35, parseInt(e.target.value) || 1)) })}
-                  className="w-20 text-center px-2 py-3 border-t border-b border-gray-300 focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-20 text-center px-2 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
                   min="1"
                   max="35"
                   required
                 />
                 <button
                   type="button"
-                  className="px-3 py-2 bg-gray-100 rounded-r-lg border border-gray-300 text-lg font-bold hover:bg-pink-100"
+                  className="px-3 py-2 bg-gray-100 rounded-r-lg border border-gray-300 text-lg font-bold hover:border-pink-200"
                   onClick={() => setFormData({ ...formData, numberOfItems: Math.min(35, formData.numberOfItems + 1) })}
                   tabIndex={-1}
                 >
@@ -367,7 +367,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               type="text"
               value={formData.sizeBookNo}
               onChange={(e) => setFormData({ ...formData, sizeBookNo: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
               placeholder="Enter size book number"
             />
           </div>
@@ -385,7 +385,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   type="date"
                   value={formData.deliveryDate}
                   onChange={(e) => setFormData({ ...formData, deliveryDate: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
                   required={formData.orderType === 'emergency' || formData.orderType === 'alter' || (formData.orderType === 'regular' && formData.editDeliveryDate)}
                   min={new Date().toISOString().split('T')[0]}
                   disabled={formData.orderType === 'regular' && !formData.editDeliveryDate}
@@ -413,7 +413,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   type="number"
                   value={formData.approximateAmount}
                   onChange={(e) => setFormData({ ...formData, approximateAmount: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
                   placeholder="0"
                   min="0"
                 />
@@ -431,7 +431,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               type="text"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
               placeholder="e.g., Silk blouse with embroidery"
               required
             />
@@ -447,7 +447,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               <textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
                 rows={3}
                 placeholder="Special instructions, color preferences, etc."
               />

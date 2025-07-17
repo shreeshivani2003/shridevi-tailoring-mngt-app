@@ -49,7 +49,8 @@ const Customers: React.FC = () => {
   // If customerId is provided, show customer detail view
   if (customerId) {
     const customer = customers.find(c => c.id === customerId);
-    const customerOrders = orders.filter(o => o.customerId === customerId);
+    // Only show pending and ongoing orders (exclude delivered)
+    const customerOrders = orders.filter(o => o.customerId === customerId && !o.isDelivered);
     
     if (!customer) {
       return (

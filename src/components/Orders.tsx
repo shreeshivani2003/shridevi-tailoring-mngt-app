@@ -422,8 +422,8 @@ const Orders: React.FC = () => {
                       </span>
                     </div>
                     {expandedGroup === `regular-${groupName}` && groupOrders.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {groupOrders.slice(0, 3).map(order => {
+                      <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
+                        {groupOrders.map(order => {
                           const customer = getCustomerById(order.customerId);
                           return (
                             <div
@@ -439,11 +439,6 @@ const Orders: React.FC = () => {
                             </div>
                           );
                         })}
-                        {groupOrders.length > 3 && (
-                          <div className="text-xs text-gray-500 text-center pt-1">
-                            +{groupOrders.length - 3} more
-                          </div>
-                        )}
                       </div>
                     )}
                   </button>
@@ -480,14 +475,14 @@ const Orders: React.FC = () => {
                       </span>
                     </div>
                     {expandedGroup === `emergency-${groupName}` && groupOrders.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {groupOrders.slice(0, 3).map(order => {
+                      <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
+                        {groupOrders.map(order => {
                           const customer = getCustomerById(order.customerId);
                           return (
                             <div
                               key={order.id}
                               className="text-xs p-2 bg-white rounded border cursor-pointer hover:bg-gray-50"
-                              onClick={(e) => {
+                              onClick={e => {
                                 e.stopPropagation();
                                 handleOrderClick(order);
                               }}
@@ -497,11 +492,6 @@ const Orders: React.FC = () => {
                             </div>
                           );
                         })}
-                        {groupOrders.length > 3 && (
-                          <div className="text-xs text-gray-500 text-center pt-1">
-                            +{groupOrders.length - 3} more
-                          </div>
-                        )}
                       </div>
                     )}
                   </button>
@@ -538,14 +528,14 @@ const Orders: React.FC = () => {
                       </span>
                     </div>
                     {expandedGroup === `alter-${groupName}` && groupOrders.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {groupOrders.slice(0, 3).map(order => {
+                      <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
+                        {groupOrders.map(order => {
                           const customer = getCustomerById(order.customerId);
                           return (
                             <div
                               key={order.id}
                               className="text-xs p-2 bg-white rounded border cursor-pointer hover:bg-gray-50"
-                              onClick={(e) => {
+                              onClick={e => {
                                 e.stopPropagation();
                                 handleOrderClick(order);
                               }}
@@ -555,11 +545,6 @@ const Orders: React.FC = () => {
                             </div>
                           );
                         })}
-                        {groupOrders.length > 3 && (
-                          <div className="text-xs text-gray-500 text-center pt-1">
-                            +{groupOrders.length - 3} more
-                          </div>
-                        )}
                       </div>
                     )}
                   </button>

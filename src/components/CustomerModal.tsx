@@ -128,7 +128,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent disabled:bg-gray-50"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
                   required
                   disabled={isViewMode}
                 />
@@ -144,7 +144,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent disabled:bg-gray-50"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
                     required
                     disabled={isViewMode}
                   />
@@ -180,7 +180,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
                       type="tel"
                       value={formData.whatsappNumber}
                       onChange={(e) => setFormData({ ...formData, whatsappNumber: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent disabled:bg-gray-50"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
                       placeholder="Same as phone number if different"
                       disabled={isViewMode}
                     />
@@ -199,7 +199,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
                 <textarea
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent disabled:bg-gray-50"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
                   rows={3}
                   placeholder="Enter customer address"
                   disabled={isViewMode}
@@ -217,7 +217,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent disabled:bg-gray-50"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
                   rows={3}
                   placeholder="Any additional notes about the customer"
                   disabled={isViewMode}

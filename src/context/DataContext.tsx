@@ -33,17 +33,26 @@ export const useData = () => {
   return context;
 };
 
-const generateCustomerId = () => {
-  return `CUST${String(Date.now()).slice(-6)}`;
+const generateCustomerId = (customers: Customer[]) => {
+  const ids = customers
+    .map((c: Customer) => c.customerId)
+    .filter((id: string) => /^CUST\d+$/.test(id))
+    .map((id: string) => parseInt(id.replace('CUST', ''), 10));
+  const next = ids.length > 0 ? Math.max(...ids) + 1 : 1;
+  return `CUST${String(next).padStart(2, '0')}`;
 };
 
-const generateOrderId = (orderType: OrderType) => {
-  // Shorter, simpler order ID: ORD12345 or EMG12345 or ALT12345
+const generateOrderId = (orders: Order[], orderType: OrderType) => {
   let prefix = 'ORD';
   if (orderType === 'emergency') prefix = 'EMG';
   if (orderType === 'alter') prefix = 'ALT';
-  const random = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
-  return `${prefix}${random}`;
+  const ids = orders
+    .map((o: Order) => o.orderId)
+    .filter((id: string) => id && id.startsWith(prefix))
+    .map((id: string) => parseInt(id.replace(prefix, ''), 10))
+    .filter((num: number) => !isNaN(num));
+  const next = ids.length > 0 ? Math.max(...ids) + 1 : 1;
+  return `${prefix}${String(next).padStart(2, '0')}`;
 };
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -141,7 +150,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newCustomer: Customer = {
         ...customerData,
         id: Date.now().toString(),
-        customerId: generateCustomerId(),
+        customerId: generateCustomerId(customers),
         createdAt: new Date(),
         orders: []
       };
@@ -270,7 +279,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Convert camelCase to snake_case for all fields
       const newOrder = {
         id: Date.now().toString(),
-        order_id: generateOrderId(orderData.orderType),
+        order_id: generateOrderId(orders, orderData.orderType),
         customer_id: orderData.customerId,
         customer_name: orderData.customerName,
         order_type: orderData.orderType,
@@ -610,13 +619,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const initialStatus = 'Order Received';
       const ordersToCreate = [];
-      const usedIds = new Set();
+      // Find the highest existing order number for this type
+      let prefix = 'ORD';
+      if (orderData.orderType === 'emergency') prefix = 'EMG';
+      if (orderData.orderType === 'alter') prefix = 'ALT';
+      const existingIds = orders
+        .map((o: Order) => o.orderId)
+        .filter((id: string) => id && id.startsWith(prefix))
+        .map((id: string) => parseInt(id.replace(prefix, ''), 10))
+        .filter((num: number) => !isNaN(num));
+      let next = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
       for (let i = 0; i < orderData.numberOfItems; i++) {
-        let orderId;
-        do {
-          orderId = generateOrderId(orderData.orderType);
-        } while (usedIds.has(orderId));
-        usedIds.add(orderId);
+        const orderId = `${prefix}${String(next).padStart(2, '0')}`;
+        next++;
         const newOrder = {
           id: (Date.now() + i).toString(),
           order_id: orderId,

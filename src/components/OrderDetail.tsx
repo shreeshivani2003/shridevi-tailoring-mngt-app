@@ -150,12 +150,17 @@ const OrderDetail: React.FC = () => {
         
         // If this was the final stage, show WhatsApp message info
         if (result.isFinalStage) {
+          const waNumber = customer?.whatsappNumber;
           const phone = customer?.phone || '';
           const defaultMessage = `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!`;
-          
-          // Open WhatsApp with the message
-          const url = `https://wa.me/${phone}?text=${encodeURIComponent(defaultMessage)}`;
-          window.open(url, '_blank');
+          if (waNumber) {
+            if (window.confirm('Send WhatsApp message to customer?')) {
+              const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(defaultMessage)}`;
+              window.open(url, '_blank');
+            }
+          } else {
+            alert('Customer does not have a WhatsApp number. Please call the customer at ' + phone + ' to notify about delivery.');
+          }
         }
       } catch (error) {
         console.error('Error marking order as delivered:', error);
@@ -346,30 +351,17 @@ const OrderDetail: React.FC = () => {
                     {customerOrders.length}
                   </span>
                 </div>
-                <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {customerOrders.slice(0, 5).map(prevOrder => (
-                    <div key={prevOrder.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-gray-800 text-sm">{prevOrder.orderId}</p>
-                          <p className="text-xs text-gray-600">{prevOrder.materialType} - {prevOrder.description}</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(prevOrder.deliveryDate).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          prevOrder.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {prevOrder.isDelivered ? 'Delivered' : prevOrder.currentStatus}
-                        </span>
+                <div className="space-y-3 max-h-48 overflow-y-auto">
+                  {customerOrders.map(prevOrder => (
+                    <div key={prevOrder.orderId} className="bg-gray-50 rounded-lg p-3 flex items-center gap-4 border border-gray-200">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-800 text-sm">{prevOrder.orderId}</p>
+                        <p className="text-xs text-gray-600">{prevOrder.materialType} - {prevOrder.description}</p>
+                        <p className="text-xs text-gray-500">{new Date(prevOrder.deliveryDate).toLocaleDateString()}</p>
                       </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${prevOrder.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{prevOrder.isDelivered ? 'Delivered' : prevOrder.currentStatus}</span>
                     </div>
                   ))}
-                  {customerOrders.length > 5 && (
-                    <p className="text-xs text-gray-500 text-center">
-                      +{customerOrders.length - 5} more orders
-                    </p>
-                  )}
                 </div>
               </div>
             )}
