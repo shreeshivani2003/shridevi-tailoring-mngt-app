@@ -33,7 +33,10 @@ const OrderModal: React.FC<OrderModalProps> = ({
     notes: '',
     referenceImage: '',
     numberOfItems: 1,
-    editDeliveryDate: false
+    editDeliveryDate: false,
+    liningClothGiven: false, // for blouse/chudi
+    fallsClothGiven: false, // for saree
+    sareeServiceType: '', // for saree
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
@@ -50,7 +53,10 @@ const OrderModal: React.FC<OrderModalProps> = ({
         notes: order.notes,
         referenceImage: order.referenceImage || '',
         numberOfItems: order.numberOfItems || 1,
-        editDeliveryDate: false
+        editDeliveryDate: false,
+        liningClothGiven: order.liningClothGiven || false,
+        fallsClothGiven: order.fallsClothGiven || false,
+        sareeServiceType: order.sareeServiceType || '',
       });
     } else if (mode === 'add') {
       // Reset form for new orders
@@ -64,7 +70,10 @@ const OrderModal: React.FC<OrderModalProps> = ({
         notes: '',
         referenceImage: '',
         numberOfItems: 1,
-        editDeliveryDate: false
+        editDeliveryDate: false,
+        liningClothGiven: false,
+        fallsClothGiven: false,
+        sareeServiceType: '',
       });
     }
   }, [order, mode, isOpen]);
@@ -137,7 +146,10 @@ const OrderModal: React.FC<OrderModalProps> = ({
         givenDate,
         approximateAmount: parseFloat(formData.approximateAmount) || 0,
         numberOfItems: formData.numberOfItems,
-        editDeliveryDate: formData.editDeliveryDate
+        editDeliveryDate: formData.editDeliveryDate,
+        liningClothGiven: formData.liningClothGiven,
+        fallsClothGiven: formData.fallsClothGiven,
+        sareeServiceType: formData.sareeServiceType,
       };
 
       console.log('Submitting order data:', orderData);
@@ -254,8 +266,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </div>
           )}
 
-          {/* Order Type Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Order Type and Material Type in one row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Order Type *
@@ -302,7 +314,6 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 </button>
               </div>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Material Type *
@@ -321,7 +332,40 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 <option value="others">Others</option>
               </select>
             </div>
-
+          </div>
+          {/* Lining/Falls checkboxes beside Material Type */}
+          <div className="flex flex-wrap gap-4 items-center mt-2">
+            {(formData.materialType === 'blouse' || formData.materialType === 'chudi') && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="liningClothGiven"
+                  checked={formData.liningClothGiven}
+                  onChange={e => setFormData({ ...formData, liningClothGiven: e.target.checked })}
+                  className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                />
+                <label htmlFor="liningClothGiven" className="text-sm font-medium text-gray-700">
+                  Lining Cloth Given?
+                </label>
+              </div>
+            )}
+            {formData.materialType === 'saree' && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="fallsClothGiven"
+                  checked={formData.fallsClothGiven}
+                  onChange={e => setFormData({ ...formData, fallsClothGiven: e.target.checked })}
+                  className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                />
+                <label htmlFor="fallsClothGiven" className="text-sm font-medium text-gray-700">
+                  Falls Cloth Given?
+                </label>
+              </div>
+            )}
+          </div>
+          {/* No. of Items and Saree Service Type in one row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 No. of Items *
@@ -356,6 +400,23 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 </button>
               </div>
             </div>
+            {formData.materialType === 'saree' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Saree Service Type
+                </label>
+                <select
+                  value={formData.sareeServiceType}
+                  onChange={e => setFormData({ ...formData, sareeServiceType: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                  required
+                >
+                  <option value="Falls Stitching">Falls Stitching</option>
+                  <option value="Falls Hemming">Falls Hemming</option>
+                  <option value="Saree Knot">Saree Knot</option>
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Size Book */}
@@ -408,13 +469,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 Approximate Amount (₹)
               </label>
               <div className="relative">
-                <DollarSign className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <span className="absolute left-0 inset-y-0 flex items-center pl-3 text-gray-400 text-lg pointer-events-none select-none">₹</span>
                 <input
                   type="number"
                   value={formData.approximateAmount}
                   onChange={(e) => setFormData({ ...formData, approximateAmount: e.target.value })}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                  placeholder="0"
                   min="0"
                 />
                 <p className="text-xs text-gray-500 mt-1 ml-2">Per {formData.materialType ? formData.materialType.charAt(0).toUpperCase() + formData.materialType.slice(1) : 'Material'}</p>
