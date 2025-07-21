@@ -3,6 +3,8 @@ import { useData } from '../context/DataContext';
 import { X, Calendar, DollarSign, FileText, Camera, Search, User, AlertTriangle, Package, Scissors } from 'lucide-react';
 import { Customer, MaterialType, OrderType } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { useNotification } from './Layout';
+import { supabase } from '../lib/supabase';
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -19,14 +21,13 @@ const OrderModal: React.FC<OrderModalProps> = ({
   order, 
   mode = 'add' 
 }) => {
-  const { addMultipleOrders, updateOrder, searchCustomers } = useData();
+  const { addMultipleOrders, updateOrder, searchCustomers, orders } = useData();
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(initialCustomer || null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [showCustomerResults, setShowCustomerResults] = useState(false);
   const [formData, setFormData] = useState({
     orderType: 'regular' as OrderType,
     materialType: 'blouse' as MaterialType,
-    sizeBookNo: '',
     description: '',
     deliveryDate: '',
     approximateAmount: '',
@@ -40,13 +41,96 @@ const OrderModal: React.FC<OrderModalProps> = ({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
+  const [customizeEachItem, setCustomizeEachItem] = useState<{ [idx: number]: boolean }>({});
+  const [customItems, setCustomItems] = useState<{ [idx: number]: any[] }>({});
+  const notification = useNotification();
+
+  // Batch selection state
+  const [batches, setBatches] = useState<{ batch_tag: string, batch_name: string }[]>([]);
+  const [selectedBatch, setSelectedBatch] = useState<string>('none');
+  const [loadingBatches, setLoadingBatches] = useState(false);
+
+  // Fetch batches for selected customer
+  useEffect(() => {
+    const fetchBatches = async () => {
+      if (!selectedCustomer) return;
+      setLoadingBatches(true);
+      const { data, error } = await supabase
+        .from('batches')
+        .select('batch_tag, batch_name')
+        .eq('customer_id', selectedCustomer.id)
+        .order('created_at', { ascending: true });
+      if (!error && data) {
+        setBatches(data);
+        if (data.length === 0) {
+          setSelectedBatch('none');
+        } else {
+          setSelectedBatch(data[data.length - 1].batch_tag);
+        }
+      }
+      setLoadingBatches(false);
+    };
+    if (selectedCustomer) {
+      fetchBatches();
+    }
+  }, [selectedCustomer]);
+
+  // Step 1: Multi-material state and handlers
+  const initialMaterial = () => ({
+    materialType: 'blouse',
+    numberOfItems: 1,
+    deliveryDate: '',
+    notes: '',
+    amount: '',
+    liningClothGiven: false,
+    fallsClothGiven: false,
+    sareeServiceType: 'Falls Stitching',
+    editDeliveryDate: false,
+  });
+
+  const [materials, setMaterials] = useState([initialMaterial()]);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+  // Ensure deliveryDate is set for regular orders when not editing
+  useEffect(() => {
+    if (formData.orderType === 'regular' && !materials[0].editDeliveryDate) {
+      const today = new Date();
+      today.setDate(today.getDate() + 7);
+      const defaultDate = today.toISOString().split('T')[0];
+      if (materials[0].deliveryDate !== defaultDate) {
+        setMaterials(mats => mats.map((mat, i) => i === 0 ? { ...mat, deliveryDate: defaultDate } : mat));
+      }
+    }
+  }, [formData.orderType, materials[0].editDeliveryDate]);
+
+  const handleMaterialChange = (idx: number, field: string, value: any) => {
+    // If toggling off editDeliveryDate for regular, set deliveryDate to default
+    if (field === 'editDeliveryDate' && formData.orderType === 'regular' && !value && idx === 0) {
+      const today = new Date();
+      today.setDate(today.getDate() + 7);
+      const defaultDate = today.toISOString().split('T')[0];
+      setMaterials(mats => mats.map((mat, i) => i === 0 ? { ...mat, editDeliveryDate: value, deliveryDate: defaultDate } : mat));
+      return;
+    }
+    setMaterials(mats => mats.map((mat, i) => i === idx ? { ...mat, [field]: value } : mat));
+  };
+  const handleAddMaterial = () => {
+    const today = new Date();
+    today.setDate(today.getDate() + 7);
+    const defaultDate = today.toISOString().split('T')[0];
+    setMaterials(mats => [
+      ...mats,
+      { ...initialMaterial(), deliveryDate: formData.orderType === 'regular' ? defaultDate : '' }
+    ]);
+  };
+  const handleRemoveMaterial = (idx: number) => setMaterials(mats => mats.length > 1 ? mats.filter((_, i) => i !== idx) : mats);
+  const handleEditMaterial = (idx: number) => setEditingIndex(idx);
 
   useEffect(() => {
     if (order && mode === 'edit') {
       setFormData({
         orderType: order.orderType,
         materialType: order.materialType,
-        sizeBookNo: order.sizeBookNo || '',
         description: order.description,
         deliveryDate: new Date(order.deliveryDate).toISOString().split('T')[0],
         approximateAmount: order.approximateAmount.toString(),
@@ -63,7 +147,6 @@ const OrderModal: React.FC<OrderModalProps> = ({
       setFormData({
         orderType: 'regular' as OrderType,
         materialType: 'blouse' as MaterialType,
-        sizeBookNo: '',
         description: '',
         deliveryDate: '',
         approximateAmount: '',
@@ -75,8 +158,49 @@ const OrderModal: React.FC<OrderModalProps> = ({
         fallsClothGiven: false,
         sareeServiceType: '',
       });
+      setCustomizeEachItem({});
+      setCustomItems({});
     }
   }, [order, mode, isOpen]);
+
+  // When numberOfItems or deliveryDate changes, update customItems defaults
+  useEffect(() => {
+    materials.forEach((mat, idx) => {
+      if (!customizeEachItem[idx]) return;
+      const count = mat.numberOfItems || 1;
+      const mainDate = formData.orderType === 'regular' && !mat.editDeliveryDate
+        ? (() => { const today = new Date(); today.setDate(today.getDate() + 7); return today.toISOString().split('T')[0]; })()
+        : mat.deliveryDate;
+      const mainAmount = mat.amount || '';
+      const mainLining = mat.liningClothGiven || false;
+      const mainFalls = mat.fallsClothGiven || false;
+      const mainSareeServiceType = mat.sareeServiceType || 'Falls Stitching';
+      setCustomItems(prev => {
+        let arr = (prev[idx] || []).slice(0, count);
+        while (arr.length < count) {
+          arr.push({
+            deliveryDate: mainDate,
+            note: '',
+            amount: mainAmount,
+            liningClothGiven: mainLining,
+            fallsClothGiven: mainFalls,
+            sareeServiceType: mainSareeServiceType,
+            _touched: false,
+          });
+        }
+        arr = arr.map((item, i) => ({
+          deliveryDate: item._touched && item.deliveryDate ? item.deliveryDate : mainDate,
+          note: item.note || '',
+          amount: item._touched && item.amount !== undefined ? item.amount : mainAmount,
+          liningClothGiven: typeof item.liningClothGiven === 'boolean' ? item.liningClothGiven : mainLining,
+          fallsClothGiven: typeof item.fallsClothGiven === 'boolean' ? item.fallsClothGiven : mainFalls,
+          sareeServiceType: item.sareeServiceType || mainSareeServiceType,
+          _touched: item._touched || false,
+        }));
+        return { ...prev, [idx]: arr };
+      });
+    });
+  }, [customizeEachItem, materials, formData.orderType]);
 
   const handleCustomerSearch = (query: string) => {
     setCustomerSearchQuery(query);
@@ -89,104 +213,170 @@ const OrderModal: React.FC<OrderModalProps> = ({
     setShowCustomerResults(false);
   };
 
+  const handleCustomItemChange = (matIdx: number, idx: number, field: string, value: any) => {
+    setCustomItems(items => ({
+      ...items,
+      [matIdx]: (items[matIdx] || []).map((item, i) =>
+        i === idx ? { ...item, [field]: value, _touched: field === 'deliveryDate' || field === 'amount' ? true : item._touched } : item
+      )
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    console.log('OrderModal handleSubmit called');
+    // Ensure all materials have a delivery date before validation
+    setMaterials(mats => mats.map(mat => {
+      if (!mat.deliveryDate && formData.orderType === 'regular') {
+        const today = new Date();
+        today.setDate(today.getDate() + 7);
+        return { ...mat, deliveryDate: today.toISOString().split('T')[0] };
+      }
+      return mat;
+    }));
+    // Wait for state update
+    await new Promise(resolve => setTimeout(resolve, 0));
     if (!selectedCustomer) {
-      alert('Please select a customer first');
+      notification.show('Please select a customer first');
+      console.log('No customer selected');
       return;
     }
-
     setIsSubmitting(true);
-
     try {
       const givenDate = new Date();
-      let deliveryDate: Date;
-      
-      // For regular orders, set delivery date to 7 days after given date
-      if (formData.orderType === 'regular') {
-        if (formData.editDeliveryDate && formData.deliveryDate) {
-          // If edit delivery date is checked, use the selected date
-          deliveryDate = new Date(formData.deliveryDate);
-        } else {
-          // Default to 7 days for regular orders
-          deliveryDate = new Date();
-          deliveryDate.setDate(givenDate.getDate() + 7);
-        }
-      } else if (formData.orderType === 'alter') {
-        // For alter orders, use the selected delivery date
-        if (formData.deliveryDate) {
-          deliveryDate = new Date(formData.deliveryDate);
-        } else {
-          // Default to 7 days for alter orders if no date selected
-          deliveryDate = new Date();
-          deliveryDate.setDate(givenDate.getDate() + 7);
-        }
-      } else {
-        // For emergency orders, use the selected delivery date
-        if (!formData.deliveryDate) {
-          alert('Please select a delivery date for emergency orders');
+      // Validate all materials
+      for (const [idx, mat] of materials.entries()) {
+        if (!mat.materialType || !mat.numberOfItems || !mat.deliveryDate) {
+          notification.show(`Please fill all required fields for Material ${idx + 1}`);
+          console.log('Validation failed for material', idx, mat);
           setIsSubmitting(false);
           return;
         }
-        deliveryDate = new Date(formData.deliveryDate);
       }
-
-      const orderData = {
-        customerId: selectedCustomer.id,
-        customerName: selectedCustomer.name,
-        orderType: formData.orderType,
-        materialType: formData.materialType,
-        sizeBookNo: formData.sizeBookNo,
-        hint: '',
-        description: formData.description,
-        referenceImage: formData.referenceImage,
-        notes: formData.notes,
-        deliveryDate,
-        givenDate,
-        approximateAmount: parseFloat(formData.approximateAmount) || 0,
-        numberOfItems: formData.numberOfItems,
-        editDeliveryDate: formData.editDeliveryDate,
-        liningClothGiven: formData.liningClothGiven,
-        fallsClothGiven: formData.fallsClothGiven,
-        sareeServiceType: formData.sareeServiceType,
+      console.log('All validations passed, submitting orders');
+      let batchTagToUse = '';
+      // Helper to robustly create a new batch with the next available number
+      const createNextAvailableBatch = async () => {
+        let attempt = 0;
+        let maxAttempts = 10;
+        let newTag = '';
+        let newName = '';
+        while (attempt < maxAttempts) {
+          const { data: latestBatches } = await supabase
+            .from('batches')
+            .select('batch_tag, batch_name')
+            .eq('customer_id', selectedCustomer.id)
+            .order('created_at', { ascending: true });
+          const customerBatchNumbers = (latestBatches || [])
+            .filter(b => b.batch_name.startsWith('Batch '))
+            .map(b => parseInt(b.batch_name.replace('Batch ', ''), 10))
+            .filter(n => !isNaN(n));
+          let nextBatchNum = 1;
+          while (customerBatchNumbers.includes(nextBatchNum)) {
+            nextBatchNum++;
+          }
+          newTag = `batch_${nextBatchNum}`;
+          newName = `Batch ${nextBatchNum}`;
+          const { error: insertError } = await supabase.from('batches').insert({
+            customer_id: selectedCustomer.id,
+            batch_tag: newTag,
+            batch_name: newName
+          });
+          if (!insertError) {
+            setBatches(b => [...b, { batch_tag: newTag, batch_name: newName }]);
+            setSelectedBatch(newTag);
+            return { batch_tag: newTag, batch_name: newName };
+          } else if (insertError.code === '409') {
+            attempt++;
+            continue;
+          } else {
+            throw insertError;
+          }
+        }
+        throw new Error('Failed to create a unique batch after multiple attempts.');
       };
-
-      console.log('Submitting order data:', orderData);
-
-      if (mode === 'add') {
-        await addMultipleOrders(orderData);
-        alert(`Successfully created ${formData.numberOfItems} order(s)!`);
-      } else if (mode === 'edit' && order) {
-        await updateOrder(order.id, orderData);
-        alert('Order updated successfully!');
+      // Only create a new batch if user selected 'New Batch'
+      if (selectedBatch === 'new') {
+        const { batch_tag: newTag } = await createNextAvailableBatch();
+        batchTagToUse = newTag;
+      } else if (selectedBatch && selectedBatch !== 'none') {
+        batchTagToUse = selectedBatch;
+      } else {
+        batchTagToUse = '';
       }
-      
-      onClose();
-    } catch (error) {
-      console.error('Error saving order:', error);
-      
-      // Provide more specific error messages
-      let errorMessage = 'Failed to save order. Please try again.';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('Supabase not configured')) {
-          errorMessage = 'Database not configured. Please create a .env file with your Supabase credentials:\n\nVITE_SUPABASE_URL=your_supabase_url\nVITE_SUPABASE_ANON_KEY=your_supabase_anon_key\n\nCheck SUPABASE_SETUP.md for detailed instructions.';
-        } else if (error.message.includes('permission denied')) {
-          errorMessage = 'Permission denied. Please check your database permissions.';
-        } else if (error.message.includes('duplicate key')) {
-          errorMessage = 'An order with this ID already exists. Please try again.';
-        } else if (error.message.includes('foreign key')) {
-          errorMessage = 'Customer not found. Please select a valid customer.';
+      // Prepare and submit each material as an order
+      for (const [matIdx, mat] of materials.entries()) {
+        if (customizeEachItem[matIdx]) {
+          for (let i = 0; i < mat.numberOfItems; i++) {
+            const item = customItems[matIdx]?.[i] || {};
+            const orderData = {
+              customerId: selectedCustomer.id,
+              customerName: selectedCustomer.name,
+              orderType: formData.orderType,
+              materialType: mat.materialType as MaterialType,
+              hint: item.note || mat.notes,
+              description: item.note || mat.notes,
+              referenceImage: '',
+              notes: item.note || mat.notes,
+              deliveryDate: new Date(item.deliveryDate || mat.deliveryDate),
+              givenDate,
+              approximateAmount: parseFloat(item.amount) || 0,
+              numberOfItems: 1,
+              editDeliveryDate: false,
+              liningClothGiven: (mat.materialType === 'blouse' || mat.materialType === 'chudi') ? item.liningClothGiven : false,
+              fallsClothGiven: mat.materialType === 'saree' ? item.fallsClothGiven : false,
+              sareeServiceType: mat.materialType === 'saree' ? item.sareeServiceType : '',
+              batchTag: batchTagToUse || undefined,
+            };
+            console.log('Order payload being sent:', orderData);
+            await addMultipleOrders(orderData);
+          }
         } else {
-          errorMessage = `Error: ${error.message}`;
+          // Normal: one order for all items
+          const orderData = {
+            customerId: selectedCustomer.id,
+            customerName: selectedCustomer.name,
+            orderType: formData.orderType,
+            materialType: mat.materialType as MaterialType,
+            hint: mat.notes,
+            description: mat.notes,
+            referenceImage: '',
+            notes: mat.notes,
+            deliveryDate: new Date(mat.deliveryDate),
+            givenDate,
+            approximateAmount: parseFloat(mat.amount) || 0,
+            numberOfItems: mat.numberOfItems,
+            editDeliveryDate: false,
+            liningClothGiven: mat.liningClothGiven,
+            fallsClothGiven: mat.fallsClothGiven,
+            sareeServiceType: mat.sareeServiceType,
+            batchTag: batchTagToUse || undefined,
+          };
+          console.log('Order payload being sent:', orderData);
+          await addMultipleOrders(orderData);
         }
       }
-      
-      alert(errorMessage);
-    } finally {
-      setIsSubmitting(false);
+      notification.show(`Successfully created order(s)!`);
+      console.log('Order(s) submitted successfully');
+      onClose();
+      if (mode === 'add') {
+        notification.show('Order added successfully!');
+        // WhatsApp integration
+        if (selectedCustomer?.whatsappEnabled && selectedCustomer?.whatsappNumber) {
+          // Find the latest order for this customer
+          const latestOrder = orders.filter((o: any) => o.customerId === selectedCustomer.id)[0];
+          const totalOrders = orders.filter((o: any) => o.customerId === selectedCustomer.id).length + materials.length;
+          const orderId = latestOrder ? latestOrder.orderId : 'N/A';
+          const msg = `Hello ${selectedCustomer.name},%0AOrder placed successfully!%0AOrder ID: *${orderId}*%0ATotal Orders: *${totalOrders}*`;
+          const url = `https://wa.me/${selectedCustomer.whatsappNumber}?text=${msg}`;
+          window.open(url, '_blank');
+        }
+      }
+    } catch (error) {
+      console.error('Error saving orders:', error);
+      notification.show('Failed to save orders. Please try again.');
     }
+    setIsSubmitting(false);
   };
 
   const customerSearchResults = searchCustomers(customerSearchQuery);
@@ -195,7 +385,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-bold text-gray-800">
@@ -228,330 +418,649 @@ const OrderModal: React.FC<OrderModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Customer Search */}
-          {mode === 'add' && !initialCustomer && (
-            <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Search Customer *
-              </label>
-              <div className="relative">
-                <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={customerSearchQuery}
-                  onChange={(e) => handleCustomerSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                  placeholder="Search by customer name, phone number, or ID..."
-                />
-              </div>
-              {showCustomerResults && customerSearchResults.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {customerSearchResults.map(customer => (
-                    <button
-                      key={customer.id}
-                      type="button"
-                      onClick={() => handleCustomerSelect(customer)}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3"
-                    >
-                      <User className="w-5 h-5 text-gray-400" />
-                      <div>
-                        <p className="font-medium text-gray-800">{customer.name}</p>
-                        <p className="text-sm text-gray-600">{customer.phone} • {customer.customerId}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Order Type and Material Type in one row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Order Type *
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, orderType: 'regular' })}
-                  className={`w-full p-4 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center whitespace-normal break-words h-full min-h-[100px] max-w-full ${
-                    formData.orderType === 'regular'
-                      ? 'border-pink-500 bg-pink-50 text-pink-700'
-                      : 'border-gray-200 hover:border-pink-200'
-                  }`}
-                >
-                  <Package className="w-6 h-6 mx-auto mb-2" />
-                  <span className="font-medium">Regular</span>
-                  <p className="text-xs text-gray-500 mt-1 text-center">7 days delivery</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, orderType: 'emergency' })}
-                  className={`w-full p-4 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center whitespace-normal break-words h-full min-h-[100px] max-w-full ${
-                    formData.orderType === 'emergency'
-                      ? 'border-red-500 bg-red-50 text-red-700'
-                      : 'border-gray-200 hover:border-red-200'
-                  }`}
-                >
-                  <AlertTriangle className="w-6 h-6 mx-auto mb-2" />
-                  <span className="font-medium">Emergency</span>
-                  <p className="text-xs text-gray-500 mt-1 text-center">Custom delivery</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, orderType: 'alter' })}
-                  className={`w-full p-4 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center whitespace-normal break-words h-full min-h-[100px] max-w-full ${
-                    formData.orderType === 'alter'
-                      ? 'border-purple-500 bg-purple-50 text-purple-700'
-                      : 'border-gray-200 hover:border-purple-200'
-                  }`}
-                >
-                  <Scissors className="w-6 h-6 mx-auto mb-2" />
-                  <span className="font-medium">Alter</span>
-                  <p className="text-xs text-gray-500 mt-1 text-center">Editable delivery</p>
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Material Type *
-              </label>
-              <select
-                value={formData.materialType}
-                onChange={(e) => setFormData({ ...formData, materialType: e.target.value as MaterialType })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                required
-              >
-                <option value="blouse">Blouse</option>
-                <option value="chudi">Chudi</option>
-                <option value="saree">Saree</option>
-                <option value="works">Works</option>
-                <option value="lehenga">Lehenga</option>
-                <option value="others">Others</option>
-              </select>
-            </div>
-          </div>
-          {/* Lining/Falls checkboxes beside Material Type */}
-          <div className="flex flex-wrap gap-4 items-center mt-2">
-            {(formData.materialType === 'blouse' || formData.materialType === 'chudi') && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="liningClothGiven"
-                  checked={formData.liningClothGiven}
-                  onChange={e => setFormData({ ...formData, liningClothGiven: e.target.checked })}
-                  className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
-                />
-                <label htmlFor="liningClothGiven" className="text-sm font-medium text-gray-700">
-                  Lining Cloth Given?
-                </label>
-              </div>
-            )}
-            {formData.materialType === 'saree' && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="fallsClothGiven"
-                  checked={formData.fallsClothGiven}
-                  onChange={e => setFormData({ ...formData, fallsClothGiven: e.target.checked })}
-                  className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
-                />
-                <label htmlFor="fallsClothGiven" className="text-sm font-medium text-gray-700">
-                  Falls Cloth Given?
-                </label>
-              </div>
-            )}
-          </div>
-          {/* No. of Items and Saree Service Type in one row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                No. of Items *
-              </label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="px-3 py-2 bg-gray-100 rounded-l-lg border border-gray-300 text-lg font-bold hover:border-pink-200"
-                  onClick={() => setFormData({ ...formData, numberOfItems: Math.max(1, formData.numberOfItems - 1) })}
-                  tabIndex={-1}
-                >
-                  -
-                </button>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={formData.numberOfItems}
-                  onChange={(e) => setFormData({ ...formData, numberOfItems: Math.max(1, Math.min(35, parseInt(e.target.value) || 1)) })}
-                  className="w-20 text-center px-2 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                  min="1"
-                  max="35"
-                  required
-                />
-                <button
-                  type="button"
-                  className="px-3 py-2 bg-gray-100 rounded-r-lg border border-gray-300 text-lg font-bold hover:border-pink-200"
-                  onClick={() => setFormData({ ...formData, numberOfItems: Math.min(35, formData.numberOfItems + 1) })}
-                  tabIndex={-1}
-                >
-                  +
-                </button>
-              </div>
-            </div>
-            {formData.materialType === 'saree' && (
+        <form onSubmit={handleSubmit} className="p-0 space-y-0" id="order-modal-form">
+          {/* Customer/Order Type selection and first material (not scrollable) */}
+          <div className="bg-pink-50 rounded-xl p-6 border border-pink-100 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+              {/* Left: Customer selection (reduced space) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Saree Service Type
-                </label>
-                <select
-                  value={formData.sareeServiceType}
-                  onChange={e => setFormData({ ...formData, sareeServiceType: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                  required
-                >
-                  <option value="Falls Stitching">Falls Stitching</option>
-                  <option value="Falls Hemming">Falls Hemming</option>
-                  <option value="Saree Knot">Saree Knot</option>
-                </select>
+                {mode === 'add' && !initialCustomer && (
+                  <div className="relative mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Search Customer *
+                    </label>
+                    <div className="relative">
+                      <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={customerSearchQuery}
+                        onChange={(e) => handleCustomerSearch(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                        placeholder="Search by customer name, phone number, or ID..."
+                      />
+                    </div>
+                    {showCustomerResults && customerSearchResults.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {customerSearchResults.map(customer => (
+                          <button
+                            key={customer.id}
+                            type="button"
+                            onClick={() => handleCustomerSelect(customer)}
+                            className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3"
+                          >
+                            <User className="w-5 h-5 text-gray-400" />
+                            <div>
+                              <p className="font-medium text-gray-800">{customer.name}</p>
+                              <p className="text-sm text-gray-600">{customer.phone} • {customer.customerId}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Right: Order Type selection and Batch selection (compact) */}
+              <div className="flex flex-col gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Order Type *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, orderType: 'regular' })}
+                      className={`w-full p-3 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center whitespace-normal break-words h-full min-h-[80px] max-w-full ${
+                        formData.orderType === 'regular'
+                          ? 'border-pink-500 bg-pink-50 text-pink-700'
+                          : 'border-gray-200 hover:border-pink-200'
+                      }`}
+                    >
+                      <Package className="w-5 h-5 mx-auto mb-1" />
+                      <span className="font-medium">Regular</span>
+                      <p className="text-xs text-gray-500 mt-1 text-center">7 days</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, orderType: 'emergency' })}
+                      className={`w-full p-3 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center whitespace-normal break-words h-full min-h-[80px] max-w-full ${
+                        formData.orderType === 'emergency'
+                          ? 'border-red-500 bg-red-50 text-red-700'
+                          : 'border-gray-200 hover:border-red-200'
+                      }`}
+                    >
+                      <AlertTriangle className="w-5 h-5 mx-auto mb-1" />
+                      <span className="font-medium">Emergency</span>
+                      <p className="text-xs text-gray-500 mt-1 text-center">Custom</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, orderType: 'alter' })}
+                      className={`w-full p-3 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center whitespace-normal break-words h-full min-h-[80px] max-w-full ${
+                        formData.orderType === 'alter'
+                          ? 'border-purple-500 bg-purple-50 text-purple-700'
+                          : 'border-gray-200 hover:border-purple-200'
+                      }`}
+                    >
+                      <Scissors className="w-5 h-5 mx-auto mb-1" />
+                      <span className="font-medium">Alter</span>
+                      <p className="text-xs text-gray-500 mt-1 text-center">Editable</p>
+                    </button>
+                  </div>
+                </div>
+                {/* Compact Batch selection */}
+                {selectedCustomer && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <label className="text-xs text-gray-500 font-normal" htmlFor="batch-select">Batch:</label>
+                    <select
+                      id="batch-select"
+                      value={selectedBatch}
+                      onChange={e => setSelectedBatch(e.target.value)}
+                      className="px-2 py-1 border border-gray-300 rounded focus:border-pink-500 focus:ring-0 text-xs"
+                      disabled={loadingBatches}
+                      style={{ minWidth: 120 }}
+                    >
+                      {batches.map(b => (
+                        <option key={b.batch_tag} value={b.batch_tag}>{b.batch_name}</option>
+                      ))}
+                      <option value="new">New Batch</option>
+                      <option value="none">No Batch</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* First material entry (not scrollable) */}
+            {materials.length > 0 && (
+              <div className="rounded-xl border p-6 relative bg-white shadow-sm mt-4">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="font-semibold text-pink-700 text-lg">Material 1</span>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => handleEditMaterial(0)} className="text-xs text-blue-600 underline">Edit</button>
+                    {materials.length > 1 && (
+                      <button type="button" onClick={() => handleRemoveMaterial(0)} className="text-xs text-red-500 underline">Remove</button>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Material Type *</label>
+                    <select
+                      value={materials[0].materialType}
+                      onChange={e => handleMaterialChange(0, 'materialType', e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                      required
+                    >
+                      <option value="blouse">Blouse</option>
+                      <option value="chudi">Chudi</option>
+                      <option value="saree">Saree</option>
+                      <option value="works">Works</option>
+                      <option value="lehenga">Lehenga</option>
+                      <option value="others">Others</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="35"
+                      value={materials[0].numberOfItems}
+                      onChange={e => handleMaterialChange(0, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Date *</label>
+                    <input
+                      type="date"
+                      value={formData.orderType === 'regular' && !materials[0].editDeliveryDate ? (() => {
+                        const today = new Date();
+                        today.setDate(today.getDate() + 7);
+                        return today.toISOString().split('T')[0];
+                      })() : materials[0].deliveryDate}
+                      onChange={e => handleMaterialChange(0, 'deliveryDate', e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                      required
+                      disabled={formData.orderType === 'regular' && !materials[0].editDeliveryDate}
+                      min={formData.orderType === 'regular' && materials[0].editDeliveryDate ? (() => {
+                        const today = new Date();
+                        today.setDate(today.getDate() + 7);
+                        return today.toISOString().split('T')[0];
+                      })() : undefined}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
+                    <div className="relative">
+                      <span className="absolute left-0 inset-y-0 flex items-center pl-3 text-gray-400 text-lg pointer-events-none select-none">₹</span>
+                      <input
+                        type="number"
+                        value={materials[0].amount}
+                        onChange={e => handleMaterialChange(0, 'amount', e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                        min="0"
+                        placeholder="₹"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6 mt-6">
+                  {(materials[0].materialType === 'blouse' || materials[0].materialType === 'chudi') && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`liningClothGiven-0`}
+                        checked={materials[0].liningClothGiven}
+                        onChange={e => handleMaterialChange(0, 'liningClothGiven', e.target.checked)}
+                        className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                        disabled={customizeEachItem[0]}
+                      />
+                      <label htmlFor={`liningClothGiven-0`} className="text-sm font-medium text-gray-700">
+                        Lining Cloth Given?
+                      </label>
+                    </div>
+                  )}
+                  {formData.orderType === 'regular' && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`editDeliveryDate-0`}
+                        checked={materials[0].editDeliveryDate || false}
+                        onChange={e => handleMaterialChange(0, 'editDeliveryDate', e.target.checked)}
+                        className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                      />
+                      <label htmlFor={`editDeliveryDate-0`} className="text-sm font-medium text-gray-700">Edit Delivery Date</label>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor={`notes-0`}>Hint</label>
+                  <textarea
+                    id={`notes-0`}
+                    value={materials[0].notes}
+                    onChange={e => handleMaterialChange(0, 'notes', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 text-base"
+                    placeholder="Any hint for this material (optional)"
+                    rows={2}
+                    tabIndex={0}
+                    disabled={customizeEachItem[0]}
+                  />
+                </div>
+                {materials[0].materialType === 'saree' && (
+                  <div className="flex flex-col gap-2 mt-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`fallsClothGiven-0`}
+                        checked={materials[0].fallsClothGiven}
+                        onChange={e => handleMaterialChange(0, 'fallsClothGiven', e.target.checked)}
+                        className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                        disabled={customizeEachItem[0]}
+                      />
+                      <label htmlFor={`fallsClothGiven-0`} className="text-sm font-medium text-gray-700">
+                        Falls Cloth Given?
+                      </label>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Saree Service Type</label>
+                      <select
+                        value={materials[0].sareeServiceType}
+                        onChange={e => handleMaterialChange(0, 'sareeServiceType', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                        required
+                        disabled={customizeEachItem[0]}
+                      >
+                        <option value="Falls Stitching">Falls Stitching</option>
+                        <option value="Falls Hemming">Falls Hemming</option>
+                        <option value="Saree Knot">Saree Knot</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                {/* Customization toggle and table for material 1 */}
+                <div className="flex items-center gap-4 mt-4">
+                  <input
+                    type="checkbox"
+                    id={`customizeEachItem-0`}
+                    checked={!!customizeEachItem[0]}
+                    onChange={e => setCustomizeEachItem(prev => ({ ...prev, 0: e.target.checked }))}
+                    className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                    disabled={materials[0].numberOfItems === 1}
+                  />
+                  <label htmlFor={`customizeEachItem-0`} className="text-sm font-medium text-gray-700">
+                    Customize Each Item (Material 1)
+                  </label>
+                </div>
+                {customizeEachItem[0] && (
+                  <div className="mt-6 border rounded-lg p-0 bg-pink-50 shadow w-full">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm border border-gray-200">
+                        <thead>
+                          <tr className="text-left bg-pink-100 border-b border-gray-200">
+                            <th className="px-4 py-2 font-semibold">Item #</th>
+                            <th className="px-4 py-2 font-semibold">Delivery Date</th>
+                            <th className="px-4 py-2 font-semibold">Hint</th>
+                            <th className="px-4 py-2 font-semibold">Amount</th>
+                            {(materials[0].materialType === 'blouse' || materials[0].materialType === 'chudi') && (
+                              <th className="px-4 py-2 font-semibold">Lining Cloth</th>
+                            )}
+                            {materials[0].materialType === 'saree' && (
+                              <>
+                                <th className="px-4 py-2 font-semibold">Falls Cloth</th>
+                                <th className="px-4 py-2 font-semibold">Saree Service Type</th>
+                              </>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Array.from({ length: materials[0].numberOfItems }).map((_, idx) => (
+                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-pink-50'}>
+                              <td className="px-4 py-2">{idx + 1}</td>
+                              <td className="px-4 py-2">
+                                <input
+                                  type="date"
+                                  value={customItems[0]?.[idx]?.deliveryDate || ''}
+                                  onChange={e => handleCustomItemChange(0, idx, 'deliveryDate', e.target.value)}
+                                  className="border rounded px-2 py-1 w-full"
+                                  required
+                                />
+                              </td>
+                              <td className="px-4 py-2">
+                                <input
+                                  type="text"
+                                  value={customItems[0]?.[idx]?.note || ''}
+                                  onChange={e => handleCustomItemChange(0, idx, 'note', e.target.value)}
+                                  className="border rounded px-2 py-1 w-full"
+                                  placeholder="Hint"
+                                />
+                              </td>
+                              <td className="px-4 py-2">
+                                <input
+                                  type="number"
+                                  value={customItems[0]?.[idx]?.amount || ''}
+                                  onChange={e => handleCustomItemChange(0, idx, 'amount', e.target.value)}
+                                  className="border rounded px-2 py-1 w-full"
+                                  min="0"
+                                  placeholder="₹"
+                                />
+                              </td>
+                              {(materials[0].materialType === 'blouse' || materials[0].materialType === 'chudi') && (
+                                <td className="px-4 py-2 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={customItems[0]?.[idx]?.liningClothGiven || false}
+                                    onChange={e => handleCustomItemChange(0, idx, 'liningClothGiven', e.target.checked)}
+                                  />
+                                </td>
+                              )}
+                              {materials[0].materialType === 'saree' && (
+                                <>
+                                  <td className="px-4 py-2 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={customItems[0]?.[idx]?.fallsClothGiven || false}
+                                      onChange={e => handleCustomItemChange(0, idx, 'fallsClothGiven', e.target.checked)}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <select
+                                      value={customItems[0]?.[idx]?.sareeServiceType || 'Falls Stitching'}
+                                      onChange={e => handleCustomItemChange(0, idx, 'sareeServiceType', e.target.value)}
+                                      className="border rounded px-2 py-1 w-full"
+                                    >
+                                      <option value="Falls Stitching">Falls Stitching</option>
+                                      <option value="Falls Hemming">Falls Hemming</option>
+                                      <option value="Saree Knot">Saree Knot</option>
+                                    </select>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {/* END customization for material 1 */}
               </div>
             )}
           </div>
-
-          {/* Size Book */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Size Book No.
-            </label>
-            <input
-              type="text"
-              value={formData.sizeBookNo}
-              onChange={(e) => setFormData({ ...formData, sizeBookNo: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-              placeholder="Enter size book number"
-            />
-          </div>
-
-          {/* Delivery Date and Amount */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {formData.orderType === 'regular' ? 'Expected Delivery Date' : 
-                 formData.orderType === 'alter' ? 'Delivery Date' : 'Delivery Date'} *
-              </label>
-              <div className="relative">
-                <Calendar className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                <input
-                  type="date"
-                  value={formData.deliveryDate}
-                  onChange={(e) => setFormData({ ...formData, deliveryDate: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                  required={formData.orderType === 'emergency' || formData.orderType === 'alter' || (formData.orderType === 'regular' && formData.editDeliveryDate)}
-                  min={new Date().toISOString().split('T')[0]}
-                  disabled={formData.orderType === 'regular' && !formData.editDeliveryDate}
-                />
+          {/* Only extra materials are scrollable */}
+          {materials.length > 1 && (
+            <div className="bg-pink-50 rounded-xl p-6 border border-pink-100 mb-4">
+              <div className="space-y-8">
+                {materials.slice(1).map((mat, idx) => (
+                  <div key={idx + 1} className="rounded-xl border p-6 relative bg-white shadow-sm">
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="font-semibold text-pink-700 text-lg">Material {idx + 2}</span>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => handleRemoveMaterial(idx + 1)} className="text-xs text-red-500 underline">Remove</button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Material Type *</label>
+                        <select
+                          value={mat.materialType}
+                          onChange={e => handleMaterialChange(idx + 1, 'materialType', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                          required
+                        >
+                          <option value="blouse">Blouse</option>
+                          <option value="chudi">Chudi</option>
+                          <option value="saree">Saree</option>
+                          <option value="works">Works</option>
+                          <option value="lehenga">Lehenga</option>
+                          <option value="others">Others</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="35"
+                          value={mat.numberOfItems}
+                          onChange={e => handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Date *</label>
+                        <input
+                          type="date"
+                          value={formData.orderType === 'regular' && !mat.editDeliveryDate ? (() => {
+                            const today = new Date();
+                            today.setDate(today.getDate() + 7);
+                            return today.toISOString().split('T')[0];
+                          })() : mat.deliveryDate}
+                          onChange={e => handleMaterialChange(idx + 1, 'deliveryDate', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                          required
+                          disabled={formData.orderType === 'regular' && !mat.editDeliveryDate}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
+                        <div className="relative">
+                          <span className="absolute left-0 inset-y-0 flex items-center pl-3 text-gray-400 text-lg pointer-events-none select-none">₹</span>
+                          <input
+                            type="number"
+                            value={mat.amount}
+                            onChange={e => handleMaterialChange(idx + 1, 'amount', e.target.value)}
+                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                            min="0"
+                            placeholder="₹"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6 mt-6">
+                      {(mat.materialType === 'blouse' || mat.materialType === 'chudi') && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`liningClothGiven-${idx + 1}`}
+                            checked={mat.liningClothGiven}
+                            onChange={e => handleMaterialChange(idx + 1, 'liningClothGiven', e.target.checked)}
+                            className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                          />
+                          <label htmlFor={`liningClothGiven-${idx + 1}`} className="text-sm font-medium text-gray-700">
+                            Lining Cloth Given?
+                          </label>
+                        </div>
+                      )}
+                      {formData.orderType === 'regular' && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`editDeliveryDate-${idx + 1}`}
+                            checked={mat.editDeliveryDate || false}
+                            onChange={e => handleMaterialChange(idx + 1, 'editDeliveryDate', e.target.checked)}
+                            className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                          />
+                          <label htmlFor={`editDeliveryDate-${idx + 1}`} className="text-sm font-medium text-gray-700">Edit Delivery Date</label>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor={`notes-${idx + 1}`}>Hint</label>
+                      <textarea
+                        id={`notes-${idx + 1}`}
+                        value={mat.notes}
+                        onChange={e => handleMaterialChange(idx + 1, 'notes', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 text-base"
+                        placeholder="Any hint for this material (optional)"
+                        rows={2}
+                        tabIndex={0}
+                        disabled={customizeEachItem[idx + 1]}
+                      />
+                    </div>
+                    {mat.materialType === 'saree' && (
+                      <div className="flex flex-col gap-2 mt-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`fallsClothGiven-${idx + 1}`}
+                            checked={mat.fallsClothGiven}
+                            onChange={e => handleMaterialChange(idx + 1, 'fallsClothGiven', e.target.checked)}
+                            className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                            disabled={customizeEachItem[idx + 1]}
+                          />
+                          <label htmlFor={`fallsClothGiven-${idx + 1}`} className="text-sm font-medium text-gray-700">
+                            Falls Cloth Given?
+                          </label>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Saree Service Type</label>
+                          <select
+                            value={mat.sareeServiceType}
+                            onChange={e => handleMaterialChange(idx + 1, 'sareeServiceType', e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                            required
+                            disabled={customizeEachItem[idx + 1]}
+                          >
+                            <option value="Falls Stitching">Falls Stitching</option>
+                            <option value="Falls Hemming">Falls Hemming</option>
+                            <option value="Saree Knot">Saree Knot</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    {/* Customization toggle and table for material 2+ */}
+                    <div className="flex items-center gap-4 mt-4">
+                      <input
+                        type="checkbox"
+                        id={`customizeEachItem-${idx + 1}`}
+                        checked={!!customizeEachItem[idx + 1]}
+                        onChange={e => setCustomizeEachItem(prev => ({ ...prev, [idx + 1]: e.target.checked }))}
+                        className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                        disabled={mat.numberOfItems === 1}
+                      />
+                      <label htmlFor={`customizeEachItem-${idx + 1}`} className="text-sm font-medium text-gray-700">
+                        Customize Each Item (Material {idx + 2})
+                      </label>
+                    </div>
+                    {customizeEachItem[idx + 1] && (
+                      <div className="mt-6 border rounded-lg p-0 bg-pink-50 shadow w-full">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-sm border border-gray-200">
+                            <thead>
+                              <tr className="text-left bg-pink-100 border-b border-gray-200">
+                                <th className="px-4 py-2 font-semibold">Item #</th>
+                                <th className="px-4 py-2 font-semibold">Delivery Date</th>
+                                <th className="px-4 py-2 font-semibold">Hint</th>
+                                <th className="px-4 py-2 font-semibold">Amount</th>
+                                {(mat.materialType === 'blouse' || mat.materialType === 'chudi') && (
+                                  <th className="px-4 py-2 font-semibold">Lining Cloth</th>
+                                )}
+                                {mat.materialType === 'saree' && (
+                                  <>
+                                    <th className="px-4 py-2 font-semibold">Falls Cloth</th>
+                                    <th className="px-4 py-2 font-semibold">Saree Service Type</th>
+                                  </>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Array.from({ length: mat.numberOfItems }).map((_, i) => (
+                                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-pink-50'}>
+                                  <td className="px-4 py-2">{i + 1}</td>
+                                  <td className="px-4 py-2">
+                                    <input
+                                      type="date"
+                                      value={customItems[idx + 1]?.[i]?.deliveryDate || ''}
+                                      onChange={e => handleCustomItemChange(idx + 1, i, 'deliveryDate', e.target.value)}
+                                      className="border rounded px-2 py-1 w-full"
+                                      required
+                                    />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <input
+                                      type="text"
+                                      value={customItems[idx + 1]?.[i]?.note || ''}
+                                      onChange={e => handleCustomItemChange(idx + 1, i, 'note', e.target.value)}
+                                      className="border rounded px-2 py-1 w-full"
+                                      placeholder="Hint"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <input
+                                      type="number"
+                                      value={customItems[idx + 1]?.[i]?.amount || ''}
+                                      onChange={e => handleCustomItemChange(idx + 1, i, 'amount', e.target.value)}
+                                      className="border rounded px-2 py-1 w-full"
+                                      min="0"
+                                      placeholder="₹"
+                                    />
+                                  </td>
+                                  {(mat.materialType === 'blouse' || mat.materialType === 'chudi') && (
+                                    <td className="px-4 py-2 text-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={customItems[idx + 1]?.[i]?.liningClothGiven || false}
+                                        onChange={e => handleCustomItemChange(idx + 1, i, 'liningClothGiven', e.target.checked)}
+                                      />
+                                    </td>
+                                  )}
+                                  {mat.materialType === 'saree' && (
+                                    <>
+                                      <td className="px-4 py-2 text-center">
+                                        <input
+                                          type="checkbox"
+                                          checked={customItems[idx + 1]?.[i]?.fallsClothGiven || false}
+                                          onChange={e => handleCustomItemChange(idx + 1, i, 'fallsClothGiven', e.target.checked)}
+                                        />
+                                      </td>
+                                      <td className="px-4 py-2">
+                                        <select
+                                          value={customItems[idx + 1]?.[i]?.sareeServiceType || 'Falls Stitching'}
+                                          onChange={e => handleCustomItemChange(idx + 1, i, 'sareeServiceType', e.target.value)}
+                                          className="border rounded px-2 py-1 w-full"
+                                        >
+                                          <option value="Falls Stitching">Falls Stitching</option>
+                                          <option value="Falls Hemming">Falls Hemming</option>
+                                          <option value="Saree Knot">Saree Knot</option>
+                                        </select>
+                                      </td>
+                                    </>
+                                  )}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                    {/* END customization for material 2+ */}
+                  </div>
+                ))}
               </div>
-              {formData.orderType === 'regular' && !formData.editDeliveryDate && (
-                <p className="text-sm text-gray-500 mt-1">
-                  Delivery date will be automatically set to 7 days from given date
-                </p>
-              )}
-              {formData.orderType === 'regular' && !formData.editDeliveryDate && (
-                <p className="text-sm text-gray-500 mt-1">
-                  Check "Edit Delivery Date" to set a custom delivery date
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Approximate Amount (₹)
-              </label>
-              <div className="relative">
-                <span className="absolute left-0 inset-y-0 flex items-center pl-3 text-gray-400 text-lg pointer-events-none select-none">₹</span>
-                <input
-                  type="number"
-                  value={formData.approximateAmount}
-                  onChange={(e) => setFormData({ ...formData, approximateAmount: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                  min="0"
-                />
-                <p className="text-xs text-gray-500 mt-1 ml-2">Per {formData.materialType ? formData.materialType.charAt(0).toUpperCase() + formData.materialType.slice(1) : 'Material'}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description *
-            </label>
-            <input
-              type="text"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-              placeholder="e.g., Silk blouse with embroidery"
-              required
-            />
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Notes
-            </label>
-            <div className="relative">
-              <FileText className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-              <textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                rows={3}
-                placeholder="Special instructions, color preferences, etc."
-              />
-            </div>
-          </div>
-
-          {/* Edit Delivery Date for Regular Orders Only */}
-          {formData.orderType === 'regular' && (
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="editDeliveryDate"
-                checked={formData.editDeliveryDate}
-                onChange={(e) => setFormData({ ...formData, editDeliveryDate: e.target.checked })}
-                className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
-              />
-              <label htmlFor="editDeliveryDate" className="text-sm font-medium text-gray-700">
-                Edit Delivery Date?
-              </label>
             </div>
           )}
-
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-6 border-t">
+          {/* Submit button */}
+          <div className="flex justify-between items-center p-6 border-t border-gray-200">
             <button
               type="button"
-              onClick={onClose}
-              className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              onClick={handleAddMaterial}
+              className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-4 py-2 rounded-md font-medium hover:from-pink-600 hover:to-rose-600 transition-all shadow text-sm"
             >
-              Cancel
+              Add Material
             </button>
             <button
               type="submit"
+              className="px-8 py-3 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 transition-colors focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2"
               disabled={isSubmitting}
-              className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-6 py-3 rounded-lg font-medium hover:from-pink-600 hover:to-rose-600 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {isSubmitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  {mode === 'add' ? 'Creating...' : 'Updating...'}
-                </>
-              ) : (
-                mode === 'add' ? 'Create Order' : mode === 'edit' ? 'Update Order' : 'View Order'
-              )}
+              {isSubmitting ? 'Submitting...' : 'Submit Order'}
             </button>
           </div>
         </form>

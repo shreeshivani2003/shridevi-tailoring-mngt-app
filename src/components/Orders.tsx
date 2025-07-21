@@ -34,7 +34,7 @@ const ORDER_TYPES = [
 
 const Orders: React.FC = () => {
   const navigate = useNavigate();
-  const { orders, customers, searchOrders, loading } = useData();
+  const { orders, customers, searchOrders, loading, batches } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedOrderType, setSelectedOrderType] = useState<string>('all');
@@ -325,6 +325,7 @@ const Orders: React.FC = () => {
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Material</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch</th> {/* Add Batch column */}
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                 </tr>
@@ -332,11 +333,12 @@ const Orders: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-100">
                 {searchFilteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-gray-400">No orders found</td>
+                    <td colSpan={7} className="text-center py-8 text-gray-400">No orders found</td>
                   </tr>
                 ) : (
                   searchFilteredOrders.map(order => {
                     const customer = customers.find(c => c.id === order.customerId);
+                    const orderBatch = batches.find(b => b.batch_tag === order.batch_tag);
                     return (
                       <tr key={order.id} className="hover:bg-pink-50 cursor-pointer" onClick={() => handleOrderClick(order)}>
                         <td className="px-4 py-2 font-mono text-pink-700">
@@ -347,6 +349,7 @@ const Orders: React.FC = () => {
                         </td>
                         <td className="px-4 py-2 capitalize">{order.orderType}</td>
                         <td className="px-4 py-2 capitalize">{order.materialType}</td>
+                        <td className="px-4 py-2">{orderBatch ? orderBatch.batch_name : '-'}</td> {/* Show batch name or '-' */}
                         <td className="px-4 py-2">{new Date(order.deliveryDate).toLocaleDateString()}</td>
                         <td className="px-4 py-2">₹{order.approximateAmount || 0}</td>
                       </tr>
@@ -579,8 +582,8 @@ const Orders: React.FC = () => {
               </div>
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
-                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => (
-                    <div key={day} className="p-2 text-center text-xs font-medium text-gray-600">
+                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+                    <div key={day + i} className="p-2 text-center text-xs font-medium text-gray-600">
                       {day}
                     </div>
                   ))}

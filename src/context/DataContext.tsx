@@ -3,9 +3,17 @@ import { Customer, Order, MaterialType, OrderType, materialStages, OrderCreation
 import { supabase, isSupabaseReady } from '../lib/supabase';
 import { checkMigrationNeeded, migrateOrderStatuses } from '../utils/statusMigration';
 
+// Add Batch type
+export interface Batch {
+  batch_tag: string;
+  batch_name: string;
+  customer_id: string;
+}
+
 interface DataContextType {
   customers: Customer[];
   orders: Order[];
+  batches: Batch[]; // <-- add this
   addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => Promise<void>;
   updateCustomer: (id: string, customer: Partial<Customer>) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
@@ -21,6 +29,7 @@ interface DataContextType {
   getDeliveredOrders: () => Order[];
   getReadyForDeliveryOrders: () => Order[];
   loading: boolean;
+  updateOrderBatchTag: (orderId: string, batchTag: string | null) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -58,6 +67,7 @@ const generateOrderId = (orders: Order[], orderType: OrderType) => {
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]); // <-- add this
   const [loading, setLoading] = useState(true);
 
   // Load initial data from Supabase
@@ -109,7 +119,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Load orders
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('id, order_id, customer_id, customer_name, material_type, description, order_type, given_date, delivery_date, current_status, status_history, is_delivered, created_at, size_book_no, hint, reference_image, approximate_amount, sizes, notes')
+        .select('id, order_id, customer_id, customer_name, material_type, order_type, given_date, delivery_date, current_status, status_history, is_delivered, created_at, hint, approximate_amount, batch_tag')
         .order('created_at', { ascending: false });
 
       if (ordersError) {
@@ -133,10 +143,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           referenceImage: order.reference_image,
           notes: order.notes,
           approximateAmount: order.approximate_amount || 0,
-          sizeBookNo: order.size_book_no,
-          hint: order.hint
+          hint: order.hint,
+          batch_tag: order.batch_tag // <-- add this
         }));
         setOrders(mappedOrders);
+      }
+
+      // Load batches
+      const { data: batchesData, error: batchesError } = await supabase
+        .from('batches')
+        .select('batch_tag, batch_name, customer_id');
+      if (batchesError) {
+        console.error('Error loading batches:', batchesError);
+      } else {
+        setBatches(batchesData || []);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -284,7 +304,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         customer_name: orderData.customerName,
         order_type: orderData.orderType,
         material_type: orderData.materialType,
-        size_book_no: orderData.sizeBookNo,
         hint: orderData.hint,
         description: orderData.description,
         sizes: orderData.sizes,
@@ -343,7 +362,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         referenceImage: data.reference_image,
         notes: data.notes,
         approximateAmount: data.approximate_amount || 0,
-        sizeBookNo: data.size_book_no,
         hint: data.hint
       };
 
@@ -363,7 +381,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (orderData.customerName !== undefined) updateData.customer_name = orderData.customerName;
       if (orderData.orderType !== undefined) updateData.order_type = orderData.orderType;
       if (orderData.materialType !== undefined) updateData.material_type = orderData.materialType;
-      if (orderData.sizeBookNo !== undefined) updateData.size_book_no = orderData.sizeBookNo;
       if (orderData.hint !== undefined) updateData.hint = orderData.hint;
       if (orderData.description !== undefined) updateData.description = orderData.description;
       if (orderData.sizes !== undefined) updateData.sizes = orderData.sizes;
@@ -413,7 +430,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         referenceImage: data.reference_image,
         notes: data.notes,
         approximateAmount: data.approximate_amount || 0,
-        sizeBookNo: data.size_book_no,
         hint: data.hint
       };
 
@@ -529,7 +545,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         referenceImage: data.reference_image,
         notes: data.notes,
         approximateAmount: data.approximate_amount || 0,
-        sizeBookNo: data.size_book_no,
         hint: data.hint
       };
 
@@ -584,7 +599,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       order.customerName.toLowerCase().includes(lowercaseQuery) ||
       order.materialType.toLowerCase().includes(lowercaseQuery) ||
       order.description.toLowerCase().includes(lowercaseQuery) ||
-      order.sizeBookNo.toLowerCase().includes(lowercaseQuery) ||
       order.hint.toLowerCase().includes(lowercaseQuery)
     );
   };
@@ -613,62 +627,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addMultipleOrders = async (orderData: OrderCreationData) => {
-    try {
-      if (!isSupabaseReady) {
-        throw new Error('Supabase not configured. Please create a .env file with your Supabase credentials.');
-      }
-      const initialStatus = 'Order Received';
-      const ordersToCreate = [];
-      // Find the highest existing order number for this type
-      let prefix = 'ORD';
-      if (orderData.orderType === 'emergency') prefix = 'EMG';
-      if (orderData.orderType === 'alter') prefix = 'ALT';
-      const existingIds = orders
-        .map((o: Order) => o.orderId)
-        .filter((id: string) => id && id.startsWith(prefix))
-        .map((id: string) => parseInt(id.replace(prefix, ''), 10))
-        .filter((num: number) => !isNaN(num));
-      let next = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
-      for (let i = 0; i < orderData.numberOfItems; i++) {
-        const orderId = `${prefix}${String(next).padStart(2, '0')}`;
-        next++;
-        const newOrder = {
-          id: (Date.now() + i).toString(),
-          order_id: orderId,
-          customer_id: orderData.customerId,
-          customer_name: orderData.customerName,
-          order_type: orderData.orderType,
-          material_type: orderData.materialType,
-          size_book_no: orderData.sizeBookNo,
-          hint: orderData.hint || '',
-          description: orderData.description,
-          sizes: {},
-          reference_image: orderData.referenceImage || null,
-          notes: orderData.notes,
-          delivery_date: orderData.deliveryDate.toISOString(),
-          given_date: orderData.givenDate.toISOString(),
-          approximate_amount: orderData.approximateAmount,
-          created_at: new Date().toISOString(),
-          current_status: initialStatus,
-          status_history: [{
-            stage: initialStatus,
-            completed_at: new Date().toISOString(),
-            notes: 'Order created'
-          }],
-          is_delivered: false
-        };
-        ordersToCreate.push(newOrder);
-      }
-      console.log(`Attempting to insert ${ordersToCreate.length} orders`);
+    console.log('addMultipleOrders received:', orderData);
+    // 1. Get the next N order numbers from the DB
+    const { data: orderNumbers, error } = await supabase.rpc('get_next_order_numbers', { n: orderData.numberOfItems });
+    if (error || !orderNumbers) {
+      throw new Error('Failed to reserve order numbers: ' + (error?.message || 'Unknown error'));
+    }
+    for (let i = 0; i < orderData.numberOfItems; i++) {
+      const orderId = orderNumbers[i].toString();
+      const newOrder = {
+        id: (Date.now() + i).toString(),
+        order_id: orderId,
+        customer_id: orderData.customerId,
+        customer_name: orderData.customerName,
+        order_type: orderData.orderType,
+        material_type: orderData.materialType,
+        hint: orderData.hint || '',
+        number_of_items: 1,
+        lining_cloth_given: orderData.liningClothGiven,
+        falls_cloth_given: orderData.fallsClothGiven,
+        saree_service_type: orderData.sareeServiceType,
+        batch_tag: orderData.batchTag || undefined,
+        delivery_date: orderData.deliveryDate.toISOString(),
+        given_date: orderData.givenDate.toISOString(),
+        approximate_amount: orderData.approximateAmount,
+        created_at: new Date().toISOString(),
+        current_status: 'Order Received',
+        status_history: [{
+          stage: 'Order Received',
+          completed_at: new Date().toISOString(),
+          notes: 'Order created'
+        }],
+        is_delivered: false
+      };
+      console.log('Inserting newOrder:', newOrder);
       const { data, error } = await supabase
         .from('orders')
-        .insert(ordersToCreate)
+        .insert([newOrder])
         .select();
       if (error) {
-        console.error('Supabase error adding orders:', error);
+        console.error('Supabase error adding order:', error);
         throw new Error(`Database error: ${error.message}`);
       }
-      console.log('Orders inserted successfully:', data);
+      console.log('Order inserted successfully:', data);
       const mappedOrders: Order[] = (data || []).map((order: any) => ({
         id: order.id,
         orderId: order.order_id,
@@ -683,17 +684,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         statusHistory: order.status_history || [],
         isDelivered: order.is_delivered,
         createdAt: new Date(order.created_at),
-        sizes: order.sizes || {},
         referenceImage: order.reference_image,
-        notes: order.notes,
         approximateAmount: order.approximate_amount || 0,
-        sizeBookNo: order.size_book_no,
-        hint: order.hint
+        hint: order.hint,
+        batch_tag: order.batch_tag,
+        sizes: {},
+        notes: ''
       }));
       setOrders(prev => [...mappedOrders, ...prev]);
-    } catch (error) {
-      console.error('Error adding multiple orders:', error);
-      throw error;
     }
   };
 
@@ -715,10 +713,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  // Update batch_tag for an order
+  const updateOrderBatchTag = async (orderId: string, batchTag: string | null) => {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .update({ batch_tag: batchTag })
+        .eq('id', orderId)
+        .select()
+        .single();
+      if (error) {
+        console.error('Error updating batch_tag:', error);
+        throw error;
+      }
+      setOrders(prev => prev.map(order => order.id === orderId ? { ...order, batch_tag: batchTag || undefined } : order));
+    } catch (error) {
+      console.error('Error updating batch_tag:', error);
+      throw error;
+    }
+  };
+
   return (
     <DataContext.Provider value={{
       customers,
       orders,
+      batches, // <-- add this
       addCustomer,
       updateCustomer,
       deleteCustomer,
@@ -733,7 +752,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       getDeliveredOrders,
       getReadyForDeliveryOrders,
       loading,
-      addMultipleOrders
+      addMultipleOrders,
+      updateOrderBatchTag
     }}>
       {children}
     </DataContext.Provider>

@@ -36,6 +36,7 @@ const OrderDetail: React.FC = () => {
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view');
+  const [multiStageSelection, setMultiStageSelection] = useState<string[]>([]);
 
   const order = orders.find(o => o.orderId === orderId);
   const customer = order ? customers.find(c => c.id === order.customerId) : null;
@@ -173,6 +174,16 @@ const OrderDetail: React.FC = () => {
   const currentStageIndex = getCurrentStageIndex(stages);
   const isFinal = isFinalStage(stages);
 
+  // Add this debug block before the multi-stage status update UI render:
+  console.log('[OrderDetail Debug]', {
+    stages,
+    currentStageIndex,
+    currentStatus: order.currentStatus,
+    orderId: order.orderId,
+    isFinal: currentStageIndex === stages.length - 1,
+    stagesAfterCurrent: stages.slice(currentStageIndex + 1)
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-rose-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -226,14 +237,6 @@ const OrderDetail: React.FC = () => {
                   <div>
                     <p className="text-sm text-gray-500">Material Type</p>
                     <p className="font-medium capitalize">{order.materialType}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-500">Size Book No</p>
-                    <p className="font-medium">{order.sizeBookNo}</p>
                   </div>
                 </div>
                 
@@ -568,6 +571,70 @@ const OrderDetail: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Multi-stage Status Update */}
+            {currentStageIndex < stages.length - 1 && (
+              <div className="mt-6">
+                <h3 className="text-md font-semibold mb-2 text-gray-800">Update Status</h3>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!multiStageSelection.length) return;
+                    // Update order status/history logic here
+                    const selectedStageIndexes = multiStageSelection.map(stage => stages.indexOf(stage)).sort((a, b) => a - b);
+                    const lastStageIdx = selectedStageIndexes[selectedStageIndexes.length - 1];
+                    // Call updateOrderStatus for each stage in order
+                    for (const idx of selectedStageIndexes) {
+                      await updateOrderStatus(order.orderId, stages[idx], `Marked as complete via multi-stage update`);
+                    }
+                    // WhatsApp message logic
+                    const completedStages = multiStageSelection.join(', ');
+                    const remainingStages = stages.slice(lastStageIdx + 1).join(', ');
+                    const waNumber = customer?.whatsappNumber;
+                    if (waNumber) {
+                      let msg = '';
+                      if (lastStageIdx === stages.length - 1) {
+                        msg = `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery. Thank you for choosing Shri Devi Tailoring!`;
+                      } else {
+                        msg = `Hello ${order.customerName},\n\n${completedStages} completed for your order ${order.orderId}. Remaining: ${remainingStages || 'None'}.`;
+                      }
+                      if (window.confirm('Send WhatsApp message to customer?')) {
+                        const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`;
+                        window.open(url, '_blank');
+                      }
+                    }
+                    setMultiStageSelection([]);
+                  }}
+                  className="space-y-2"
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {stages.slice(currentStageIndex + 1).map((stage) => (
+                      <label key={stage} className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={multiStageSelection.includes(stage)}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setMultiStageSelection(sel => [...sel, stage]);
+                            } else {
+                              setMultiStageSelection(sel => sel.filter(s => s !== stage));
+                            }
+                          }}
+                        />
+                        <span className="text-sm">{stage}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={multiStageSelection.length === 0}
+                    className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    Mark Selected Stages as Complete
+                  </button>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       </div>

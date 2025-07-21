@@ -11,6 +11,7 @@ import OrderDetail from './components/OrderDetail';
 import Status from './components/Status';
 import SizeChart from './components/SizeChart';
 import SuperAdmin from './components/SuperAdmin';
+import CustomerDashboard from './components/CustomerDashboard';
 import { isFeatureEnabled } from './config/features';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode, allowedRoles?: string[] }> = ({ 
@@ -118,6 +119,14 @@ const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute allowedRoles={['super_admin']}>
               <SuperAdmin />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="customer-dashboard" 
+          element={
+            <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
+              <CustomerDashboard />
             </ProtectedRoute>
           } 
         />

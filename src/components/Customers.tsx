@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import CustomerModal from './CustomerModal';
 import OrderModal from './OrderModal';
+import { Order } from '../types';
 
 const Customers: React.FC = () => {
   const { customerId } = useParams<{ customerId: string }>();
@@ -29,13 +30,16 @@ const Customers: React.FC = () => {
     searchCustomers, 
     customers, 
     orders,
-    addOrder 
+    addOrder,
+    batches,
+    loading
   } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [showBatches, setShowBatches] = useState(false); // <-- move here
 
   // Get customers with their order counts
   const customersWithOrderCounts = getCustomersWithOrderCounts();
@@ -48,9 +52,37 @@ const Customers: React.FC = () => {
 
   // If customerId is provided, show customer detail view
   if (customerId) {
-    const customer = customers.find(c => c.id === customerId);
+    if (loading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading customer...</p>
+          </div>
+        </div>
+      );
+    }
+    // Fix: compare as string
+    const customer = customers.find(c => String(c.id) === String(customerId));
     // Only show pending and ongoing orders (exclude delivered)
     const customerOrders = orders.filter(o => o.customerId === customerId && !o.isDelivered);
+    // Get batches for this customer
+    const customerBatches = batches.filter(b => b.customer_id === customerId);
+    // Group orders by batch_tag
+    const getBatches = (orders: Order[]): { batches: Record<string, Order[]>; unbatched: Order[] } => {
+      const batchesMap: Record<string, Order[]> = {};
+      orders.forEach((order: Order) => {
+        // Debug log
+        console.log('Order', order.orderId, 'batch_tag:', order.batch_tag);
+        const tag = order.batch_tag || '';
+        if (tag) {
+          if (!batchesMap[tag]) batchesMap[tag] = [];
+          batchesMap[tag].push(order);
+        }
+      });
+      const unbatched = orders.filter((o: Order) => !o.batch_tag);
+      return { batches: batchesMap, unbatched };
+    };
     
     if (!customer) {
       return (
@@ -194,15 +226,17 @@ const Customers: React.FC = () => {
                     </div>
                   </div>
                   
-                  {customer.notes && (
-                    <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl">
-                      <User className="w-5 h-5 text-gray-500 mt-0.5" />
+                  {/* Show batch info for this customer */}
+                  {customerBatches.length > 0 && (
+                    <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl">
+                      <Package className="w-5 h-5 text-purple-500" />
                       <div>
-                        <p className="text-sm text-gray-500">Notes</p>
-                        <p className="font-semibold text-gray-900 text-sm">{customer.notes}</p>
+                        <p className="text-sm text-gray-500">Batches</p>
+                        <p className="font-semibold text-gray-900 text-sm">{customerBatches.map(b => b.batch_name).join(', ')}</p>
                       </div>
                     </div>
                   )}
+                  
                 </div>
               </div>
             </div>
@@ -216,72 +250,118 @@ const Customers: React.FC = () => {
                   </div>
                   <h2 className="text-xl font-bold text-gray-900">Order History</h2>
                 </div>
-                
-                {customerOrders.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Package className="w-10 h-10 text-gray-400" />
-                    </div>
-                    <p className="text-gray-500 font-medium mb-2">No orders yet</p>
-                    <p className="text-sm text-gray-400">Create the first order for this customer</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {Object.entries(ordersByMaterial).map(([materialType, materialOrders]) => (
-                      <div key={materialType} className="border border-gray-200 rounded-xl p-4 bg-gradient-to-r from-gray-50 to-white">
-                        <div className="flex items-center gap-2 mb-4">
-                          <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-purple-500 rounded-lg flex items-center justify-center">
-                            <Package className="w-4 h-4 text-white" />
-                          </div>
-                          <h3 className="font-bold text-gray-900 capitalize">
-                            {materialType} ({materialOrders.length})
-                          </h3>
-                        </div>
-                        <div className="space-y-3">
-                          {materialOrders.map(order => (
-                            <div
-                              key={order.id}
-                              className="p-4 bg-white rounded-xl cursor-pointer hover:shadow-lg transition-all border border-gray-100 hover:border-pink-200"
-                              onClick={() => handleOrderClick(order)}
-                            >
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="font-bold text-gray-900">#{order.orderId}</span>
-                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                      order.orderType === 'emergency' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-blue-100 text-blue-700 border border-blue-200'
-                                    }`}>
-                                      {order.orderType}
-                                    </span>
-                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                      order.isDelivered ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                                    }`}>
-                                      {order.isDelivered ? 'Delivered' : order.currentStatus}
-                                    </span>
+                {/* Toggle for All Orders vs Grouped by Batch */}
+                <div className="mb-4 flex gap-4 items-center">
+                  <button
+                    className={`px-4 py-2 rounded-lg font-medium ${!showBatches ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-700'}`}
+                    onClick={() => setShowBatches(false)}
+                  >
+                    All Orders
+                  </button>
+                  <button
+                    className={`px-4 py-2 rounded-lg font-medium ${showBatches ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-700'}`}
+                    onClick={() => setShowBatches(true)}
+                  >
+                    Grouped by Batch
+                  </button>
+                </div>
+                {showBatches ? (() => {
+                  const { batches: batchMap, unbatched } = getBatches(customerOrders);
+                  const batchTags = customerBatches.map(b => b.batch_tag);
+                  return (
+                    <div className="space-y-6">
+                      {batchTags.length === 0 && <div className="text-gray-400 text-sm">No batches created yet.</div>}
+                      {batchTags.map((tag, idx) => {
+                        const batchName = customerBatches.find(b => b.batch_tag === tag)?.batch_name || `Batch ${idx + 1}`;
+                        return (
+                          <div key={tag} className="border rounded-lg p-4 bg-purple-50">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-lg font-semibold text-purple-700">
+                                {batchName} <span className="text-xs text-gray-500">({tag})</span>
+                              </h3>
+                            </div>
+                            <div className="space-y-2">
+                              {batchMap[tag]?.map(order => (
+                                <div key={order.id} className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between bg-pink-50">
+                                  <div>
+                                    <div className="font-medium text-gray-800">{order.materialType} ({order.orderId})</div>
+                                    <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
+                                    <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
                                   </div>
-                                  <p className="text-sm text-gray-600 mb-3 font-medium">{order.description}</p>
-                                  <div className="flex items-center gap-4 text-xs text-gray-500">
-                                    <div className="flex items-center gap-1">
-                                      <Calendar className="w-3 h-3" />
-                                      <span>Given: {new Date(order.givenDate).toLocaleDateString()}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="w-3 h-3" />
-                                      <span>Due: {new Date(order.deliveryDate).toLocaleDateString()}</span>
-                                    </div>
+                                  <div className="mt-2 md:mt-0">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{order.isDelivered ? 'Ready' : 'Pending'}</span>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <div className="text-lg font-bold text-gray-900">
-                                    ₹{order.approximateAmount}
-                                  </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {unbatched.length > 0 && (
+                        <div className="border rounded-lg p-4 bg-gray-50">
+                          <h3 className="text-lg font-semibold text-gray-700 mb-2">Unbatched Orders</h3>
+                          <div className="space-y-2">
+                            {unbatched.map(order => (
+                              <div key={order.id} className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between bg-pink-50">
+                                <div>
+                                  <div className="font-medium text-gray-800">{order.materialType} ({order.orderId})</div>
+                                  <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
+                                  <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
+                                </div>
+                                <div className="mt-2 md:mt-0">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{order.isDelivered ? 'Ready' : 'Pending'}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })() : (
+                  // All Orders view
+                  <div className="space-y-6">
+                    {customerOrders.length === 0 ? (
+                      <div className="text-center py-12">
+                        <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Package className="w-10 h-10 text-gray-400" />
+                        </div>
+                        <p className="text-gray-500 font-medium mb-2">No orders yet</p>
+                        <p className="text-sm text-gray-400">Create the first order for this customer</p>
+                      </div>
+                    ) : (
+                      customerOrders.map(order => (
+                        <div
+                          key={order.id}
+                          className="p-4 bg-white rounded-xl cursor-pointer hover:shadow-lg transition-all border border-gray-100 hover:border-pink-200"
+                          onClick={() => handleOrderClick(order)}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-bold text-gray-900">#{order.orderId}</span>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${order.orderType === 'emergency' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>{order.orderType}</span>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${order.isDelivered ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-yellow-100 text-yellow-700 border border-yellow-200'}`}>{order.isDelivered ? 'Delivered' : order.currentStatus}</span>
+                              </div>
+                              <p className="text-sm text-gray-600 mb-3 font-medium">{order.description}</p>
+                              <div className="flex items-center gap-4 text-xs text-gray-500">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  <span>Given: {new Date(order.givenDate).toLocaleDateString()}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>Due: {new Date(order.deliveryDate).toLocaleDateString()}</span>
                                 </div>
                               </div>
                             </div>
-                          ))}
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-gray-900">₹{order.approximateAmount}</div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 )}
               </div>
@@ -391,67 +471,75 @@ const Customers: React.FC = () => {
               )}
             </div>
           ) : (
-            filteredCustomers.map((customer, index) => (
-              <div
-                key={customer.id}
-                className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all transform hover:scale-[1.02] hover:border-pink-200 animate-fade-in"
-                style={{
-                  animationDelay: `${index * 100}ms`
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-4 mb-3">
-                      <div className="w-14 h-14 bg-gradient-to-br from-pink-400 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
-                        <User className="w-7 h-7 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-gray-900 text-lg truncate">
-                          {customer.name}
-                        </h3>
-                        <p className="text-sm text-purple-600 font-semibold">ID: {customer.customerId}</p>
-                      </div>
-                      {customer.orderCount > 0 && (
-                        <div className="flex items-center gap-1 bg-gradient-to-r from-green-100 to-emerald-100 px-3 py-1 rounded-full">
-                          <TrendingUp className="w-4 h-4 text-green-600" />
-                          <span className="text-sm font-bold text-green-700">{customer.orderCount} orders</span>
+            filteredCustomers.map((customer, index) => {
+              // Get batches for this customer
+              const customerBatches = batches.filter(b => b.customer_id === customer.id);
+              return (
+                <div
+                  key={customer.id}
+                  className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all transform hover:scale-[1.02] hover:border-pink-200 animate-fade-in"
+                  style={{
+                    animationDelay: `${index * 100}ms`
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-4 mb-3">
+                        <div className="w-14 h-14 bg-gradient-to-br from-pink-400 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
+                          <User className="w-7 h-7 text-white" />
                         </div>
-                      )}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-gray-900 text-lg truncate">
+                            {customer.name}
+                          </h3>
+                          <p className="text-sm text-purple-600 font-semibold">ID: {customer.customerId}</p>
+                          {/* Show batch info for this customer */}
+                          {customerBatches.length > 0 && (
+                            <p className="text-xs text-purple-700 font-medium mt-1">Batches: {customerBatches.map(b => b.batch_name).join(', ')}</p>
+                          )}
+                        </div>
+                        {customer.orderCount > 0 && (
+                          <div className="flex items-center gap-1 bg-gradient-to-r from-green-100 to-emerald-100 px-3 py-1 rounded-full">
+                            <TrendingUp className="w-4 h-4 text-green-600" />
+                            <span className="text-sm font-bold text-green-700">{customer.orderCount} orders</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-6 text-sm text-gray-600">
+                        <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-cyan-50 px-3 py-2 rounded-lg">
+                          <Phone className="w-4 h-4 text-blue-500" />
+                          <span className="font-medium">{customer.phone}</span>
+                        </div>
+                        {customer.whatsappNumber && (
+                          <div className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 px-3 py-2 rounded-lg">
+                            <MessageCircle className="w-4 h-4 text-green-500" />
+                            <span className="font-medium">{customer.whatsappNumber}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     
-                    <div className="flex items-center gap-6 text-sm text-gray-600">
-                      <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-cyan-50 px-3 py-2 rounded-lg">
-                        <Phone className="w-4 h-4 text-blue-500" />
-                        <span className="font-medium">{customer.phone}</span>
-                      </div>
-                      {customer.whatsappNumber && (
-                        <div className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 px-3 py-2 rounded-lg">
-                          <MessageCircle className="w-4 h-4 text-green-500" />
-                          <span className="font-medium">{customer.whatsappNumber}</span>
-                        </div>
-                      )}
+                    <div className="flex items-center gap-3 ml-6">
+                      <button
+                        onClick={() => handleViewCustomer(customer)}
+                        className="p-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg"
+                        title="View Customer"
+                      >
+                        <Eye className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleEditCustomer(customer)}
+                        className="p-3 bg-gradient-to-r from-gray-500 to-slate-600 text-white rounded-xl hover:from-gray-600 hover:to-slate-700 transition-all shadow-lg"
+                        title="Edit Customer"
+                      >
+                        <Edit className="w-5 h-5" />
+                      </button>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-3 ml-6">
-                    <button
-                      onClick={() => handleViewCustomer(customer)}
-                      className="p-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg"
-                      title="View Customer"
-                    >
-                      <Eye className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleEditCustomer(customer)}
-                      className="p-3 bg-gradient-to-r from-gray-500 to-slate-600 text-white rounded-xl hover:from-gray-600 hover:to-slate-700 transition-all shadow-lg"
-                      title="Edit Customer"
-                    >
-                      <Edit className="w-5 h-5" />
-                    </button>
-                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

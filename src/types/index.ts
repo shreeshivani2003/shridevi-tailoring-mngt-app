@@ -30,7 +30,6 @@ export interface Order {
   customerName: string;
   orderType: OrderType;
   materialType: MaterialType;
-  sizeBookNo: string;
   hint: string;
   description: string;
   sizes: SizeChart;
@@ -43,6 +42,7 @@ export interface Order {
   statusHistory: StatusUpdate[];
   isDelivered: boolean;
   createdAt: Date;
+  batch_tag?: string;
 }
 
 export interface StatusUpdate {
@@ -85,14 +85,13 @@ export interface OrderCreationData {
   customerName: string;
   orderType: OrderType;
   materialType: MaterialType;
-  sizeBookNo: string;
   hint: string;
-  description: string;
-  referenceImage?: string;
-  notes: string;
   deliveryDate: Date;
   givenDate: Date;
   approximateAmount: number;
   numberOfItems: number;
-  editDeliveryDate?: boolean;
+  liningClothGiven?: boolean;
+  fallsClothGiven?: boolean;
+  sareeServiceType?: string;
+  batchTag?: string;
 }

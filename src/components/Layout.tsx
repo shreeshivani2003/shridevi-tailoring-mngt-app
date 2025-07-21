@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, createContext, useContext } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { isFeatureEnabled } from '../config/features';
@@ -15,10 +15,21 @@ import {
   ArrowLeft
 } from 'lucide-react';
 
+// Notification Context
+const NotificationContext = createContext({ show: (msg: string) => {}, hide: () => {}, message: '', visible: false });
+export const useNotification = () => useContext(NotificationContext);
+
 const Layout: React.FC = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [notification, setNotification] = useState({ message: '', visible: false });
+
+  const show = (msg: string) => {
+    setNotification({ message: msg, visible: true });
+    setTimeout(() => setNotification({ message: '', visible: false }), 3000);
+  };
+  const hide = () => setNotification({ message: '', visible: false });
 
   const handleLogout = () => {
     logout();
@@ -27,6 +38,7 @@ const Layout: React.FC = () => {
 
   const navigationItems = [
     ...(isFeatureEnabled('DASHBOARD_ENABLED') ? [{ path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['super_admin', 'admin'] }] : []),
+    { path: '/customer-dashboard', icon: Users, label: 'Customer Dashboard', roles: ['super_admin', 'admin'] },
     { path: '/customers', icon: Users, label: 'Customers', roles: ['super_admin', 'admin'] },
     { path: '/orders', icon: Package, label: 'Orders', roles: ['super_admin', 'admin'] },
     { path: '/status', icon: Activity, label: 'Status', roles: ['super_admin', 'admin', 'user'] },
@@ -39,69 +51,75 @@ const Layout: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-rose-100">
-      {/* Migration Status Notification */}
-      <MigrationStatus />
-      
-      <div className="flex">
-        {/* Sidebar */}
-        <div className="w-64 bg-white shadow-lg min-h-screen">
-          <div className="p-6 border-b border-pink-100">
-            <h1 className="text-2xl font-bold text-pink-800">Shri Devi Tailoring</h1>
-            <p className="text-sm text-pink-600 mt-1">Management System</p>
+    <NotificationContext.Provider value={{ show, hide, message: notification.message, visible: notification.visible }}>
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 to-rose-100">
+        {/* Migration Status Notification */}
+        <MigrationStatus />
+        {notification.visible && (
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg animate-fade-in">
+            {notification.message}
           </div>
-          {/* Back Button */}
-          {location.pathname !== '/' && location.pathname !== '/login' && (
-            <button
-              onClick={() => navigate(-1)}
-              className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-pink-50 hover:text-pink-800 transition-colors w-full text-left"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="font-medium">Back</span>
-            </button>
-          )}
-          <nav className="mt-6">
-            {filteredNavItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center px-6 py-3 text-gray-700 hover:bg-pink-50 hover:text-pink-800 transition-colors ${
-                    isActive ? 'bg-pink-100 text-pink-800 border-r-4 border-pink-500' : ''
-                  }`}
-                >
-                  <Icon className="w-5 h-5 mr-3" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="absolute bottom-0 w-64 p-6 border-t border-pink-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-700">{user?.username}</p>
-                <p className="text-xs text-gray-500 capitalize">{user?.role?.replace('_', ' ')}</p>
-              </div>
+        )}
+        <div className="flex">
+          {/* Sidebar */}
+          <div className="w-64 bg-white shadow-lg min-h-screen">
+            <div className="p-6 border-b border-pink-100">
+              <h1 className="text-2xl font-bold text-pink-800">Shri Devi Tailoring</h1>
+              <p className="text-sm text-pink-600 mt-1">Management System</p>
+            </div>
+            {/* Back Button */}
+            {location.pathname !== '/' && location.pathname !== '/login' && (
               <button
-                onClick={handleLogout}
-                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                onClick={() => navigate(-1)}
+                className="flex items-center gap-2 px-6 py-3 text-gray-600 hover:bg-pink-50 hover:text-pink-800 transition-colors w-full text-left"
               >
-                <LogOut className="w-4 h-4" />
+                <ArrowLeft className="w-5 h-5" />
+                <span className="font-medium">Back</span>
               </button>
+            )}
+            <nav className="mt-6">
+              {filteredNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path;
+                
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center px-6 py-3 text-gray-700 hover:bg-pink-50 hover:text-pink-800 transition-colors ${
+                      isActive ? 'bg-pink-100 text-pink-800 border-r-4 border-pink-500' : ''
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 mr-3" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="absolute bottom-0 w-64 p-6 border-t border-pink-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">{user?.username}</p>
+                  <p className="text-xs text-gray-500 capitalize">{user?.role?.replace('_', ' ')}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Main Content */}
-        <div className="flex-1 p-8">
-          <Outlet />
+          {/* Main Content */}
+          <div className="flex-1 p-8">
+            <Outlet />
+          </div>
         </div>
       </div>
-    </div>
+    </NotificationContext.Provider>
   );
 };
 

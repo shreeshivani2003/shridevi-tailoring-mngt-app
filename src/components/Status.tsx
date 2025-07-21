@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from './Layout';
 import {
   Search,
   CheckCircle,
@@ -20,6 +21,7 @@ const Status: React.FC = () => {
   const { orders, updateOrderStatus, customers, getDeliveredOrders, getReadyForDeliveryOrders } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const notification = useNotification();
 
   // Admin filters and state
   const [search, setSearch] = useState('');
@@ -30,6 +32,7 @@ const Status: React.FC = () => {
   const [waImages, setWaImages] = useState<{[orderId: string]: string[]}>({});
   const [waMsg, setWaMsg] = useState<{[orderId: string]: string}>({});
   const [showDeliveryBucket, setShowDeliveryBucket] = useState(false);
+  const [multiStageSelection, setMultiStageSelection] = useState<{[orderId: string]: string[]}>({});
 
   // User-only state
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,50 +106,60 @@ const Status: React.FC = () => {
 
   // Status update logic with automatic WhatsApp
   const handleStatusUpdate = async (order: any) => {
+    console.log('handleStatusUpdate called for order:', order);
+    // Find the next status
     const stages = materialStages[order.materialType as keyof typeof materialStages];
     let currentIdx = stages.indexOf(order.currentStatus);
-    
-    // If current status not found, try to migrate old status names
-    if (currentIdx === -1) {
-      // Handle old "Checking" status - determine if it's first or second checking
-      if (order.currentStatus === 'Checking') {
-        // Check status history to determine if this is first or second checking
-        const hasCompletedStages = order.statusHistory.some((status: any) => 
-          ['Cutting', 'Stitching', 'Hemming', 'Work'].includes(status.stage)
-        );
-        
-        if (hasCompletedStages) {
-          // This is likely the second checking (Final Checking)
-          currentIdx = stages.indexOf('Final Checking');
-        } else {
-          // This is likely the first checking (Initial Checking)
-          currentIdx = stages.indexOf('Initial Checking');
-        }
-      } else {
-        // For other unknown statuses, default to first stage
-        currentIdx = 0;
+    if (currentIdx === -1) currentIdx = 0;
+    const nextIdx = currentIdx + 1;
+    const nextStatus = stages[nextIdx];
+
+    // Find customer and log
+    const customer = customers.find(c => c.id === order.customerId);
+    console.log('Customer found:', customer);
+    const waNumber = customer ? (customer.whatsappNumber || customer.phone) : '';
+
+    if (nextStatus) {
+      if (customer) {
+        console.log('whatsappEnabled:', customer.whatsappEnabled, 'whatsappNumber:', customer.whatsappNumber, 'waNumber used:', waNumber);
       }
-    }
-    
-    if (currentIdx < stages.length - 1) {
+      if (customer && customer.whatsappEnabled && waNumber) {
+        const msg = `Hello ${order.customerName},%0AOrder ID: *${order.orderId}*%0AStatus: *${nextStatus}*%0AMaterial: ${order.materialType}`;
+        const url = `https://wa.me/${waNumber}?text=${msg}`;
+        console.log('Opening WhatsApp:', url);
+        window.open(url, '_blank');
+        notification.show(`WhatsApp message sent for status: ${nextStatus}`);
+      }
       try {
         const result = await updateOrderStatus(order.orderId, 'next');
-        
-        // If this was the final stage, automatically send WhatsApp message
         if (result.isFinalStage) {
-          const phone = getPhone(result.order);
-          const defaultMessage = `Hello ${result.order.customerName}!\n\nYour order ${result.order.orderId} (${result.order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!\nFor picking, please come to the shop between 10am-6pm.`;
-          
-          // Show success message
-          alert(`Order ${result.order.orderId} completed! WhatsApp message will be sent automatically.`);
-          
-          // Open WhatsApp with the message
-          const url = `https://wa.me/${phone}?text=${encodeURIComponent(defaultMessage)}`;
-          window.open(url, '_blank');
+          const customer = customers.find(c => c.id === order.customerId);
+          const waNumber = customer ? (customer.whatsappNumber || customer.phone) : '';
+          if (customer && customer.whatsappEnabled && waNumber) {
+            const defaultMessage = `Hello ${result.order.customerName}!\n\nYour order ${result.order.orderId} (${result.order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!\nFor picking, please come to the shop between 10am-6pm.`;
+            const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(defaultMessage)}`;
+            console.log('Opening WhatsApp for final stage:', url);
+            window.open(url, '_blank');
+            notification.show(`Order ${result.order.orderId} completed! WhatsApp message will be sent automatically.`);
+          }
         }
       } catch (error) {
         console.error('Error updating order status:', error);
-        alert('Error updating order status');
+        notification.show('Error updating order status');
+      }
+    } else {
+      if (customer) {
+        console.log('whatsappEnabled:', customer.whatsappEnabled, 'whatsappNumber:', customer.whatsappNumber, 'waNumber used:', waNumber);
+      }
+      // If already at final stage, still send the final WhatsApp message
+      if (customer && customer.whatsappEnabled && waNumber) {
+        const defaultMessage = `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!\nFor picking, please come to the shop between 10am-6pm.`;
+        const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(defaultMessage)}`;
+        console.log('Opening WhatsApp for final stage (already final):', url);
+        window.open(url, '_blank');
+        notification.show('Order is already at final stage. WhatsApp message sent.');
+      } else {
+        notification.show('Already at final stage.');
       }
     }
   };
@@ -157,7 +170,7 @@ const Status: React.FC = () => {
     const msg = waMsg[order.orderId] || `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!\nFor picking, please come to the shop between 10am-6pm.`;
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
     window.open(url, '_blank');
-    alert('WhatsApp message sent!');
+    notification.show('WhatsApp message sent!');
   };
 
   // User-only logic
@@ -168,7 +181,7 @@ const Status: React.FC = () => {
       setSelectedOrder(order);
       setWhatsappMessage(`Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!\nFor picking, please come to the shop between 10am-6pm.`);
     } else {
-      alert('Order not found. Please check the Order ID.');
+      notification.show('Order not found. Please check the Order ID.');
       setSelectedOrder(null);
     }
   };

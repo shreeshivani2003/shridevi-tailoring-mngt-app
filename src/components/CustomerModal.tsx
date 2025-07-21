@@ -3,6 +3,7 @@ import { useData } from '../context/DataContext';
 import { X, Phone, MessageCircle, MapPin, FileText, Plus } from 'lucide-react';
 import { Customer } from '../types';
 import OrderModal from './OrderModal';
+import { useNotification } from './Layout';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
   });
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const notification = useNotification();
 
   // Get customer's orders and order count
   const customerOrders = customer ? orders.filter(order => order.customerId === customer.id) : [];
@@ -56,20 +58,26 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('Submitting customer form:', { mode, formData });
+    notification.show('Submitting customer form...');
     
     try {
       setIsSubmitting(true);
       
       if (mode === 'add') {
-        console.log('Adding customer...');
+        notification.show('Adding customer...');
         await addCustomer(formData);
-        console.log('Customer added successfully');
-        alert('Customer added successfully!');
+        notification.show('Customer added successfully');
+        notification.show('Customer added successfully!');
+        // WhatsApp integration
+        if (formData.whatsappEnabled && formData.whatsappNumber) {
+          const msg = `Hello ${formData.name},%0AWelcome to Shri Devi Tailoring!%0ACustomer ID: *${formData.customerId}*%0AYou have *0* orders with us.`;
+          const url = `https://wa.me/${formData.whatsappNumber}?text=${msg}`;
+          window.open(url, '_blank');
+        }
       } else if (mode === 'edit' && customer) {
-        console.log('Updating customer...');
+        notification.show('Updating customer...');
         await updateCustomer(customer.id, formData);
-        console.log('Customer updated successfully');
+        notification.show('Customer updated successfully');
         alert('Customer updated successfully!');
       }
       
@@ -202,24 +210,6 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
                   rows={3}
                   placeholder="Enter customer address"
-                  disabled={isViewMode}
-                />
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Notes
-              </label>
-              <div className="relative">
-                <FileText className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
-                  rows={3}
-                  placeholder="Any additional notes about the customer"
                   disabled={isViewMode}
                 />
               </div>
