@@ -14,6 +14,8 @@ interface OrderModalProps {
   mode?: 'add' | 'edit' | 'view';
 }
 
+
+
 const OrderModal: React.FC<OrderModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -21,7 +23,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
   order, 
   mode = 'add' 
 }) => {
-  const { addMultipleOrders, updateOrder, searchCustomers, orders } = useData();
+  const { addMultipleOrders, updateOrder, searchCustomers, orders, loadData } = useData();
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(initialCustomer || null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [showCustomerResults, setShowCustomerResults] = useState(false);
@@ -53,27 +55,61 @@ const OrderModal: React.FC<OrderModalProps> = ({
   // Fetch batches for selected customer
   useEffect(() => {
     const fetchBatches = async () => {
-      if (!selectedCustomer) return;
-      setLoadingBatches(true);
-      const { data, error } = await supabase
-        .from('batches')
-        .select('batch_tag, batch_name')
-        .eq('customer_id', selectedCustomer.id)
-        .order('created_at', { ascending: true });
-      if (!error && data) {
-        setBatches(data);
-        if (data.length === 0) {
-          setSelectedBatch('none');
-        } else {
-          setSelectedBatch(data[data.length - 1].batch_tag);
-        }
+      if (!selectedCustomer) {
+        setBatches([]);
+        setSelectedBatch('none');
+        return;
       }
-      setLoadingBatches(false);
+      
+      setLoadingBatches(true);
+      try {
+        const { data, error } = await supabase
+          .from('batches')
+          .select('batch_tag, batch_name')
+          .eq('customer_id', selectedCustomer.id)
+          .order('created_at', { ascending: true });
+          
+        if (error) {
+          console.error('Error fetching batches for customer:', selectedCustomer.id, error);
+          notification.show('Failed to load batches. Please try again.');
+          setBatches([]);
+          setSelectedBatch('none');
+        } else if (data) {
+          console.log(`Fetched ${data.length} batches for customer ${selectedCustomer.name}:`, data);
+          setBatches(data);
+          
+          // Set default selection: latest batch if exists, otherwise 'none'
+          if (data.length === 0) {
+            setSelectedBatch('none');
+          } else {
+            // Select the most recent batch (last in the array since we order by created_at ascending)
+            const latestBatch = data[data.length - 1];
+            setSelectedBatch(latestBatch.batch_tag);
+            console.log(`Auto-selected latest batch: ${latestBatch.batch_name} (${latestBatch.batch_tag})`);
+          }
+        }
+      } catch (err) {
+        console.error('Unexpected error fetching batches:', err);
+        notification.show('Failed to load batches. Please try again.');
+        setBatches([]);
+        setSelectedBatch('none');
+      } finally {
+        setLoadingBatches(false);
+      }
     };
-    if (selectedCustomer) {
-      fetchBatches();
-    }
+    
+    fetchBatches();
   }, [selectedCustomer]);
+
+  // Debug logging for batch state changes
+  useEffect(() => {
+    console.log('Batch state updated:', {
+      selectedCustomer: selectedCustomer?.name,
+      batchesCount: batches.length,
+      selectedBatch,
+      loadingBatches
+    });
+  }, [batches, selectedBatch, selectedCustomer, loadingBatches]);
 
   // Step 1: Multi-material state and handlers
   const initialMaterial = () => ({
@@ -91,27 +127,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
   const [materials, setMaterials] = useState([initialMaterial()]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  // Ensure deliveryDate is set for regular orders when not editing
-  useEffect(() => {
-    if (formData.orderType === 'regular' && !materials[0].editDeliveryDate) {
-      const today = new Date();
-      today.setDate(today.getDate() + 7);
-      const defaultDate = today.toISOString().split('T')[0];
-      if (materials[0].deliveryDate !== defaultDate) {
-        setMaterials(mats => mats.map((mat, i) => i === 0 ? { ...mat, deliveryDate: defaultDate } : mat));
-      }
-    }
-  }, [formData.orderType, materials[0].editDeliveryDate]);
+
 
   const handleMaterialChange = (idx: number, field: string, value: any) => {
-    // If toggling off editDeliveryDate for regular, set deliveryDate to default
-    if (field === 'editDeliveryDate' && formData.orderType === 'regular' && !value && idx === 0) {
-      const today = new Date();
-      today.setDate(today.getDate() + 7);
-      const defaultDate = today.toISOString().split('T')[0];
-      setMaterials(mats => mats.map((mat, i) => i === 0 ? { ...mat, editDeliveryDate: value, deliveryDate: defaultDate } : mat));
-      return;
-    }
     setMaterials(mats => mats.map((mat, i) => i === idx ? { ...mat, [field]: value } : mat));
   };
   const handleAddMaterial = () => {
@@ -222,6 +240,39 @@ const OrderModal: React.FC<OrderModalProps> = ({
     }));
   };
 
+  // Helper function to refresh batches for the selected customer
+  const refreshBatches = async () => {
+    if (!selectedCustomer) return;
+    
+    setLoadingBatches(true);
+    try {
+      const { data, error } = await supabase
+        .from('batches')
+        .select('batch_tag, batch_name')
+        .eq('customer_id', selectedCustomer.id)
+        .order('created_at', { ascending: true });
+        
+      if (error) {
+        console.error('Error refreshing batches:', error);
+        notification.show('Failed to refresh batches');
+      } else if (data) {
+        setBatches(data);
+        if (data.length > 0) {
+          setSelectedBatch(data[data.length - 1].batch_tag);
+        } else {
+          setSelectedBatch('none');
+        }
+        notification.show(`Refreshed ${data.length} batches`);
+        console.log('Batches refreshed:', data);
+      }
+    } catch (err) {
+      console.error('Unexpected error refreshing batches:', err);
+      notification.show('Failed to refresh batches');
+    } finally {
+      setLoadingBatches(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('OrderModal handleSubmit called');
@@ -261,48 +312,90 @@ const OrderModal: React.FC<OrderModalProps> = ({
         let maxAttempts = 10;
         let newTag = '';
         let newName = '';
+        
         while (attempt < maxAttempts) {
-          const { data: latestBatches } = await supabase
+          // Always fetch fresh batch data from the backend
+          const { data: latestBatches, error: fetchError } = await supabase
             .from('batches')
             .select('batch_tag, batch_name')
             .eq('customer_id', selectedCustomer.id)
             .order('created_at', { ascending: true });
+            
+          if (fetchError) {
+            console.error('Error fetching batches:', fetchError);
+            throw new Error('Failed to fetch existing batches');
+          }
+          
+          // Calculate next batch number from fresh data
           const customerBatchNumbers = (latestBatches || [])
             .filter(b => b.batch_name.startsWith('Batch '))
             .map(b => parseInt(b.batch_name.replace('Batch ', ''), 10))
             .filter(n => !isNaN(n));
+            
           let nextBatchNum = 1;
           while (customerBatchNumbers.includes(nextBatchNum)) {
             nextBatchNum++;
           }
+          
           newTag = `batch_${nextBatchNum}`;
           newName = `Batch ${nextBatchNum}`;
+          
+          // Insert the new batch
           const { error: insertError } = await supabase.from('batches').insert({
             customer_id: selectedCustomer.id,
             batch_tag: newTag,
             batch_name: newName
           });
+          
           if (!insertError) {
-            setBatches(b => [...b, { batch_tag: newTag, batch_name: newName }]);
-            setSelectedBatch(newTag);
-            return { batch_tag: newTag, batch_name: newName };
-          } else if (insertError.code === '409') {
+            // Successfully created batch - refetch the complete batch list
+            const { data: updatedBatches, error: refetchError } = await supabase
+              .from('batches')
+              .select('batch_tag, batch_name')
+              .eq('customer_id', selectedCustomer.id)
+              .order('created_at', { ascending: true });
+              
+            if (!refetchError && updatedBatches) {
+              // Update UI state with fresh batch list
+              setBatches(updatedBatches);
+              // Set the newly created batch as selected
+              setSelectedBatch(newTag);
+              console.log(`Successfully created and selected new batch: ${newName} (${newTag})`);
+              return { batch_tag: newTag, batch_name: newName };
+            } else {
+              console.error('Error refetching batches after creation:', refetchError);
+              // Fallback: update local state manually
+              setBatches(prev => [...prev, { batch_tag: newTag, batch_name: newName }]);
+              setSelectedBatch(newTag);
+              return { batch_tag: newTag, batch_name: newName };
+            }
+          } else if (insertError.code === '23505') { // Unique constraint violation
+            console.log(`Batch ${newName} already exists, retrying...`);
             attempt++;
             continue;
           } else {
-            throw insertError;
+            console.error('Error creating batch:', insertError);
+            throw new Error(`Failed to create batch: ${insertError.message}`);
           }
         }
+        
         throw new Error('Failed to create a unique batch after multiple attempts.');
       };
       // Only create a new batch if user selected 'New Batch'
       if (selectedBatch === 'new') {
+        console.log('Creating new batch for customer:', selectedCustomer.name);
+        notification.show('Creating new batch...');
         const { batch_tag: newTag } = await createNextAvailableBatch();
         batchTagToUse = newTag;
+        console.log('New batch created and selected:', newTag);
+        notification.show(`Created new batch: ${newTag.replace('batch_', 'Batch ')}`);
+        await loadData(); // Refresh global state after batch creation
       } else if (selectedBatch && selectedBatch !== 'none') {
         batchTagToUse = selectedBatch;
+        console.log('Using existing batch:', selectedBatch);
       } else {
         batchTagToUse = '';
+        console.log('No batch selected for this order');
       }
       // Prepare and submit each material as an order
       for (const [matIdx, mat] of materials.entries()) {
@@ -330,6 +423,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
             };
             console.log('Order payload being sent:', orderData);
             await addMultipleOrders(orderData);
+            await loadData(); // Refresh global state after adding order
           }
         } else {
           // Normal: one order for all items
@@ -354,6 +448,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
           };
           console.log('Order payload being sent:', orderData);
           await addMultipleOrders(orderData);
+          await loadData(); // Refresh global state after adding order
         }
       }
       notification.show(`Successfully created order(s)!`);
@@ -512,20 +607,42 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 {selectedCustomer && (
                   <div className="flex items-center gap-2 mt-2">
                     <label className="text-xs text-gray-500 font-normal" htmlFor="batch-select">Batch:</label>
-                    <select
-                      id="batch-select"
-                      value={selectedBatch}
-                      onChange={e => setSelectedBatch(e.target.value)}
-                      className="px-2 py-1 border border-gray-300 rounded focus:border-pink-500 focus:ring-0 text-xs"
-                      disabled={loadingBatches}
-                      style={{ minWidth: 120 }}
-                    >
-                      {batches.map(b => (
-                        <option key={b.batch_tag} value={b.batch_tag}>{b.batch_name}</option>
-                      ))}
-                      <option value="new">New Batch</option>
-                      <option value="none">No Batch</option>
-                    </select>
+                    <div className="flex items-center gap-1">
+                      <select
+                        id="batch-select"
+                        value={selectedBatch}
+                        onChange={e => setSelectedBatch(e.target.value)}
+                        className="px-2 py-1 border border-gray-300 rounded focus:border-pink-500 focus:ring-0 text-xs"
+                        disabled={loadingBatches}
+                        style={{ minWidth: 120 }}
+                      >
+                        {loadingBatches ? (
+                          <option value="">Loading...</option>
+                        ) : (
+                          <>
+                            {batches.map(b => (
+                              <option key={b.batch_tag} value={b.batch_tag}>{b.batch_name}</option>
+                            ))}
+                            <option value="new">➕ New Batch</option>
+                            <option value="none">❌ No Batch</option>
+                          </>
+                        )}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={refreshBatches}
+                        disabled={loadingBatches}
+                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 disabled:opacity-50"
+                        title="Refresh batches"
+                      >
+                        🔄
+                      </button>
+                    </div>
+                    {selectedBatch === 'new' && (
+                      <span className="text-xs text-blue-600 font-medium">
+                        Will create next sequential batch
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -561,37 +678,66 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="35"
-                      value={materials[0].numberOfItems}
-                      onChange={e => handleMaterialChange(0, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                      required
-                    />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        max="35"
+                        value={materials[0].numberOfItems}
+                        onChange={e => handleMaterialChange(0, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
+                        className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                        required
+                      />
+                      <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex flex-col">
+                        <button
+                          type="button"
+                          onClick={() => handleMaterialChange(0, 'numberOfItems', Math.min(35, materials[0].numberOfItems + 1))}
+                          disabled={materials[0].numberOfItems >= 35}
+                          className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMaterialChange(0, 'numberOfItems', Math.max(1, materials[0].numberOfItems - 1))}
+                          disabled={materials[0].numberOfItems <= 1}
+                          className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Date *</label>
-                    <input
-                      type="date"
-                      value={formData.orderType === 'regular' && !materials[0].editDeliveryDate ? (() => {
-                        const today = new Date();
-                        today.setDate(today.getDate() + 7);
-                        return today.toISOString().split('T')[0];
-                      })() : materials[0].deliveryDate}
-                      onChange={e => handleMaterialChange(0, 'deliveryDate', e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                      required
-                      disabled={formData.orderType === 'regular' && !materials[0].editDeliveryDate}
-                      min={formData.orderType === 'regular' && materials[0].editDeliveryDate ? (() => {
-                        const today = new Date();
-                        today.setDate(today.getDate() + 7);
-                        return today.toISOString().split('T')[0];
-                      })() : undefined}
-                    />
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={materials[0].deliveryDate}
+                        onChange={e => handleMaterialChange(0, 'deliveryDate', e.target.value)}
+                        className={`w-full px-4 py-3 border rounded-lg focus:border-pink-500 focus:ring-0 ${
+                          materials[0].deliveryDate === new Date().toISOString().split('T')[0] 
+                            ? 'border-pink-500 bg-pink-50' 
+                            : 'border-gray-300'
+                        }`}
+                        required
+                        disabled={formData.orderType === 'regular' && !materials[0].editDeliveryDate}
+                        min={formData.orderType === 'regular' && materials[0].editDeliveryDate ? (() => {
+                          const today = new Date();
+                          today.setDate(today.getDate() + 7);
+                          return today.toISOString().split('T')[0];
+                        })() : undefined}
+                      />
+                      {materials[0].deliveryDate === new Date().toISOString().split('T')[0] && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <span className="text-xs bg-pink-500 text-white px-2 py-1 rounded-full font-medium">
+                            Today
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
@@ -721,13 +867,26 @@ const OrderModal: React.FC<OrderModalProps> = ({
                             <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-pink-50'}>
                               <td className="px-4 py-2">{idx + 1}</td>
                               <td className="px-4 py-2">
-                                <input
-                                  type="date"
-                                  value={customItems[0]?.[idx]?.deliveryDate || ''}
-                                  onChange={e => handleCustomItemChange(0, idx, 'deliveryDate', e.target.value)}
-                                  className="border rounded px-2 py-1 w-full"
-                                  required
-                                />
+                                <div className="relative">
+                                  <input
+                                    type="date"
+                                    value={customItems[0]?.[idx]?.deliveryDate || ''}
+                                    onChange={e => handleCustomItemChange(0, idx, 'deliveryDate', e.target.value)}
+                                    className={`border rounded px-2 py-1 w-full ${
+                                      customItems[0]?.[idx]?.deliveryDate === new Date().toISOString().split('T')[0]
+                                        ? 'border-pink-500 bg-pink-50'
+                                        : 'border-gray-300'
+                                    }`}
+                                    required
+                                  />
+                                  {customItems[0]?.[idx]?.deliveryDate === new Date().toISOString().split('T')[0] && (
+                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                      <span className="text-xs bg-pink-500 text-white px-1 py-0.5 rounded-full font-medium">
+                                        Today
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-4 py-2">
                                 <input
@@ -821,32 +980,61 @@ const OrderModal: React.FC<OrderModalProps> = ({
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="35"
-                          value={mat.numberOfItems}
-                          onChange={e => handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                          required
-                        />
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="1"
+                            max="35"
+                            value={mat.numberOfItems}
+                            onChange={e => handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
+                            className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                            required
+                          />
+                          <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex flex-col">
+                            <button
+                              type="button"
+                              onClick={() => handleMaterialChange(idx + 1, 'numberOfItems', Math.min(35, mat.numberOfItems + 1))}
+                              disabled={mat.numberOfItems >= 35}
+                              className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, mat.numberOfItems - 1))}
+                              disabled={mat.numberOfItems <= 1}
+                              className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+                            >
+                              ▼
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Date *</label>
-                        <input
-                          type="date"
-                          value={formData.orderType === 'regular' && !mat.editDeliveryDate ? (() => {
-                            const today = new Date();
-                            today.setDate(today.getDate() + 7);
-                            return today.toISOString().split('T')[0];
-                          })() : mat.deliveryDate}
-                          onChange={e => handleMaterialChange(idx + 1, 'deliveryDate', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                          required
-                          disabled={formData.orderType === 'regular' && !mat.editDeliveryDate}
-                        />
+                        <div className="relative">
+                          <input
+                            type="date"
+                            value={mat.deliveryDate}
+                            onChange={e => handleMaterialChange(idx + 1, 'deliveryDate', e.target.value)}
+                            className={`w-full px-4 py-3 border rounded-lg focus:border-pink-500 focus:ring-0 ${
+                              mat.deliveryDate === new Date().toISOString().split('T')[0] 
+                                ? 'border-pink-500 bg-pink-50' 
+                                : 'border-gray-300'
+                            }`}
+                            required
+                            disabled={formData.orderType === 'regular' && !mat.editDeliveryDate}
+                          />
+                          {mat.deliveryDate === new Date().toISOString().split('T')[0] && (
+                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                              <span className="text-xs bg-pink-500 text-white px-2 py-1 rounded-full font-medium">
+                                Today
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>

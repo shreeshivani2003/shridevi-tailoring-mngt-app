@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { X, Phone, MessageCircle, MapPin, FileText, Plus } from 'lucide-react';
+import { X, Phone, MessageCircle, MapPin, FileText, Plus, Trash2 } from 'lucide-react';
 import { Customer } from '../types';
 import OrderModal from './OrderModal';
 import { useNotification } from './Layout';
@@ -10,6 +10,12 @@ interface CustomerModalProps {
   onClose: () => void;
   customer?: Customer | null;
   mode: 'add' | 'edit' | 'view';
+}
+
+interface PhoneNumber {
+  id: string;
+  number: string;
+  isWhatsApp: boolean;
 }
 
 const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer, mode }) => {
@@ -23,6 +29,9 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
     notes: '',
     customerId: ''
   });
+  const [phoneNumbers, setPhoneNumbers] = useState<PhoneNumber[]>([
+    { id: '1', number: '', isWhatsApp: false }
+  ]);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const notification = useNotification();
@@ -42,6 +51,16 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
         notes: customer.notes || '',
         customerId: customer.customerId
       });
+      
+      // Parse phone numbers from customer data
+      if (customer.phone) {
+        const numbers = customer.phone.split(',').map((num, index) => ({
+          id: String(index + 1),
+          number: num.trim(),
+          isWhatsApp: customer.whatsappNumber === num.trim()
+        }));
+        setPhoneNumbers(numbers.length > 0 ? numbers : [{ id: '1', number: '', isWhatsApp: false }]);
+      }
     } else {
       setFormData({
         name: '',
@@ -52,11 +71,52 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
         notes: '',
         customerId: ''
       });
+      setPhoneNumbers([{ id: '1', number: '', isWhatsApp: false }]);
     }
   }, [customer, mode, isOpen]);
 
+  const addPhoneNumber = () => {
+    const newId = String(phoneNumbers.length + 1);
+    setPhoneNumbers([...phoneNumbers, { id: newId, number: '', isWhatsApp: false }]);
+  };
+
+  const removePhoneNumber = (id: string) => {
+    if (phoneNumbers.length > 1) {
+      setPhoneNumbers(phoneNumbers.filter(phone => phone.id !== id));
+    }
+  };
+
+  const updatePhoneNumber = (id: string, field: 'number' | 'isWhatsApp', value: string | boolean) => {
+    setPhoneNumbers(phoneNumbers.map(phone => 
+      phone.id === id ? { ...phone, [field]: value } : phone
+    ));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate that at least one phone number is provided
+    const validPhoneNumbers = phoneNumbers.filter(phone => phone.number.trim() !== '');
+    if (validPhoneNumbers.length === 0) {
+      alert('Please enter at least one phone number.');
+      return;
+    }
+
+    // Get the primary phone number (first one)
+    const primaryPhone = validPhoneNumbers[0].number;
+    
+    // Get the WhatsApp number (the one marked as WhatsApp)
+    const whatsAppPhone = validPhoneNumbers.find(phone => phone.isWhatsApp)?.number || primaryPhone;
+    
+    // Combine all phone numbers into a comma-separated string
+    const allPhoneNumbers = validPhoneNumbers.map(phone => phone.number).join(', ');
+    
+    const submitData = {
+      ...formData,
+      phone: allPhoneNumbers,
+      whatsappNumber: whatsAppPhone,
+      whatsappEnabled: true
+    };
     
     notification.show('Submitting customer form...');
     
@@ -65,18 +125,18 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
       
       if (mode === 'add') {
         notification.show('Adding customer...');
-        await addCustomer(formData);
+        await addCustomer(submitData);
         notification.show('Customer added successfully');
         notification.show('Customer added successfully!');
         // WhatsApp integration
-        if (formData.whatsappEnabled && formData.whatsappNumber) {
-          const msg = `Hello ${formData.name},%0AWelcome to Shri Devi Tailoring!%0ACustomer ID: *${formData.customerId}*%0AYou have *0* orders with us.`;
-          const url = `https://wa.me/${formData.whatsappNumber}?text=${msg}`;
+        if (submitData.whatsappEnabled && submitData.whatsappNumber) {
+          const msg = `Hello ${submitData.name},%0AWelcome to Shri Devi Tailoring!%0ACustomer ID: *${submitData.customerId}*%0AYou have *0* orders with us.`;
+          const url = `https://wa.me/${submitData.whatsappNumber}?text=${msg}`;
           window.open(url, '_blank');
         }
       } else if (mode === 'edit' && customer) {
         notification.show('Updating customer...');
-        await updateCustomer(customer.id, formData);
+        await updateCustomer(customer.id, submitData);
         notification.show('Customer updated successfully');
         alert('Customer updated successfully!');
       }
@@ -144,58 +204,69 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number *
+                  Phone Numbers *
                 </label>
-                <div className="relative">
-                  <Phone className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
-                    required
-                    disabled={isViewMode}
-                  />
+                <div className="space-y-3">
+                  {phoneNumbers.map((phone, index) => (
+                    <div key={phone.id} className="flex items-center gap-3">
+                      <div className="relative flex-1">
+                        <Phone className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                        <input
+                          type="tel"
+                          value={phone.number}
+                          onChange={(e) => updatePhoneNumber(phone.id, 'number', e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
+                          placeholder="Enter phone number"
+                          disabled={isViewMode}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id={`whatsapp-${phone.id}`}
+                          checked={phone.isWhatsApp}
+                          onChange={(e) => {
+                            // Uncheck all other checkboxes
+                            setPhoneNumbers(phoneNumbers.map(p => ({
+                              ...p,
+                              isWhatsApp: p.id === phone.id ? e.target.checked : false
+                            })));
+                          }}
+                          className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                          disabled={isViewMode}
+                        />
+                        <label htmlFor={`whatsapp-${phone.id}`} className="text-sm text-gray-600 flex items-center gap-1">
+                          <MessageCircle className="w-4 h-4 text-green-500" />
+                          WhatsApp
+                        </label>
+                      </div>
+                      {phoneNumbers.length > 1 && !isViewMode && (
+                        <button
+                          type="button"
+                          onClick={() => removePhoneNumber(phone.id)}
+                          className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Remove phone number"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {!isViewMode && (
+                    <button
+                      type="button"
+                      onClick={addPhoneNumber}
+                      className="flex items-center gap-2 text-pink-600 hover:text-pink-700 text-sm font-medium"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Another Phone Number
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* WhatsApp Settings */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="whatsappEnabled"
-                  checked={formData.whatsappEnabled}
-                  onChange={(e) => setFormData({ ...formData, whatsappEnabled: e.target.checked })}
-                  className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
-                  disabled={isViewMode}
-                />
-                <label htmlFor="whatsappEnabled" className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <MessageCircle className="w-4 h-4 text-green-500" />
-                  Enable WhatsApp notifications
-                </label>
-              </div>
 
-              {formData.whatsappEnabled && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    WhatsApp Number
-                  </label>
-                  <div className="relative">
-                    <MessageCircle className="w-5 h-5 text-green-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                    <input
-                      type="tel"
-                      value={formData.whatsappNumber}
-                      onChange={(e) => setFormData({ ...formData, whatsappNumber: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 disabled:bg-gray-50"
-                      placeholder="Same as phone number if different"
-                      disabled={isViewMode}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Address */}
             <div>

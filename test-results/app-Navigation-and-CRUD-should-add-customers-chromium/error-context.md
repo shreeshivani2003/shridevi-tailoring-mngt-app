@@ -1,0 +1,62 @@
+# Page snapshot
+
+```yaml
+- heading "Shri Devi Tailoring" [level=1]
+- paragraph: Management System
+- button "Back":
+  - img
+  - text: Back
+- navigation:
+  - link "Customers":
+    - /url: /customers
+    - img
+    - text: Customers
+  - link "Orders":
+    - /url: /orders
+    - img
+    - text: Orders
+  - link "Status":
+    - /url: /status
+    - img
+    - text: Status
+  - link "Super Admin":
+    - /url: /super-admin
+    - img
+    - text: Super Admin
+- paragraph: shivani
+- paragraph: super admin
+- button:
+  - img
+- heading "Customers" [level=1]
+- paragraph: Manage your customer database
+- paragraph: Total Customers
+- paragraph: "0"
+- img
+- textbox "Search customers by name, phone, or ID..."
+- img
+- heading "No customers yet" [level=3]
+- paragraph: Get started by adding your first customer
+- button "Add First Customer":
+  - img
+  - text: Add First Customer
+- button "Add New Customer":
+  - img
+- heading "Add New Customer" [level=2]
+- button:
+  - img
+- text: Customer Name *
+- textbox
+- text: Phone Number *
+- img
+- textbox
+- checkbox "Enable WhatsApp notifications"
+- img
+- text: Enable WhatsApp notifications Address
+- img
+- textbox "Enter customer address"
+- text: Notes
+- img
+- textbox "Any additional notes about the customer"
+- button "Cancel"
+- button "Add Customer"
+```

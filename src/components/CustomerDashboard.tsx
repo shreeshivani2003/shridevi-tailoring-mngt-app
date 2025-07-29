@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { supabase } from '../lib/supabase';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Users,
@@ -22,6 +23,7 @@ const getDaysDiff = (date: Date) => {
 
 const CustomerDashboard: React.FC = () => {
   const { customers, orders, updateOrderBatchTag } = useData();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState({
     category: '',
@@ -32,6 +34,9 @@ const CustomerDashboard: React.FC = () => {
   const [showDetails, setShowDetails] = useState(false);
   const [batches, setBatches] = useState<{ batch_tag: string, batch_name: string }[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(false);
+
+  // Define material priority order for listing
+  const MATERIAL_PRIORITY = ['blouse', 'saree', 'works', 'lehenga', 'chudi', 'others'];
   // Fetch batches for selected customer
   useEffect(() => {
     const fetchBatches = async () => {
@@ -100,6 +105,11 @@ const CustomerDashboard: React.FC = () => {
   const closeDetails = () => {
     setShowDetails(false);
     setSelectedCustomer(null);
+  };
+
+  const handleOrderClick = (order: Order) => {
+    console.log('Navigating to order:', order.orderId);
+    navigate(`/orders/${order.orderId}`);
   };
 
   // --- GROUP ORDERS FOR DETAILS ---
@@ -350,9 +360,22 @@ const CustomerDashboard: React.FC = () => {
                         {materialOrders
                           .sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime())
                           .map(order => (
-                            <div key={order.id} className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between bg-pink-50">
+                            <div 
+                              key={order.id} 
+                              className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between bg-pink-50 hover:bg-pink-100 cursor-pointer transition-colors"
+                              onClick={() => handleOrderClick(order)}
+                            >
                               <div>
-                                <div className="font-medium text-gray-800">{order.materialType} ({order.orderId})</div>
+                                <div className="font-medium text-gray-800">
+                                  {order.materialType} (
+                                                                     <span 
+                                     className="text-blue-600 underline cursor-pointer hover:text-blue-800"
+                                     onClick={() => handleOrderClick(order)}
+                                   >
+                                    {order.orderId}
+                                  </span>
+                                  )
+                                </div>
                                 <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
                                 <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
                                 {order.batch_tag && <div className="text-xs text-purple-600">Batch: {order.batch_tag}</div>}
@@ -403,35 +426,70 @@ const CustomerDashboard: React.FC = () => {
                           </div>
                           <div className="space-y-2">
                             {batchMap[tag]?.length === 0 && <div className="text-gray-400 text-sm">No orders in this batch</div>}
-                            {batchMap[tag]?.map(order => (
-                              <div key={order.id} className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between bg-pink-50">
-                                <div>
-                                  <div className="font-medium text-gray-800">{order.materialType} ({order.orderId})</div>
-                                  <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
-                                  <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
-                                </div>
-                                <div className="mt-2 md:mt-0 flex flex-col md:flex-row md:items-center gap-2">
-                                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{order.isDelivered ? 'Ready' : 'Pending'}</span>
-                                  <select
-                                    className="border rounded px-2 py-1 text-xs"
-                                    value={batchAssignments[order.id] || order.batch_tag || ''}
-                                    onChange={e => {
-                                      const newTag = e.target.value;
-                                      if (newTag === 'unbatch') {
-                                        removeOrderFromBatch(order.id);
-                                      } else {
-                                        addOrderToBatch(order.id, newTag);
-                                      }
-                                    }}
-                                  >
-                                    {batches.map(b => (
-                                      <option key={b.batch_tag} value={b.batch_tag}>{b.batch_name}</option>
+                            {MATERIAL_PRIORITY.map(materialType => {
+                              const materialOrders = batchMap[tag]?.filter(order => order.materialType === materialType) || [];
+                              
+                              if (materialOrders.length === 0) return null;
+                              
+                              // Sort orders by delivery date (soonest first)
+                              const sortedMaterialOrders = materialOrders.sort((a, b) => 
+                                new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime()
+                              );
+                              
+                              return (
+                                <div key={materialType} className="mb-4">
+                                  <div className="bg-gradient-to-r from-pink-100 to-purple-100 px-3 py-2 rounded-lg mb-2">
+                                    <h4 className="text-sm font-semibold text-gray-700 capitalize">
+                                      {materialType} ({materialOrders.length})
+                                    </h4>
+                                  </div>
+                                  <div className="space-y-2 ml-2">
+                                    {sortedMaterialOrders.map(order => (
+                                      <div 
+                                        key={order.id} 
+                                        className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between bg-pink-50 hover:bg-pink-100 cursor-pointer transition-colors"
+                                        onClick={() => handleOrderClick(order)}
+                                      >
+                                        <div>
+                                          <div className="font-medium text-gray-800">
+                                            {order.materialType} (
+                                            <span 
+                                              className="text-blue-600 underline cursor-pointer hover:text-blue-800"
+                                              onClick={() => handleOrderClick(order)}
+                                            >
+                                              {order.orderId}
+                                            </span>
+                                            )
+                                          </div>
+                                          <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
+                                          <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
+                                        </div>
+                                        <div className="mt-2 md:mt-0 flex flex-col md:flex-row md:items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{order.isDelivered ? 'Ready' : 'Pending'}</span>
+                                          <select
+                                            className="border rounded px-2 py-1 text-xs"
+                                            value={batchAssignments[order.id] || order.batch_tag || ''}
+                                            onChange={e => {
+                                              const newTag = e.target.value;
+                                              if (newTag === 'unbatch') {
+                                                removeOrderFromBatch(order.id);
+                                              } else {
+                                                addOrderToBatch(order.id, newTag);
+                                              }
+                                            }}
+                                          >
+                                            {batches.map(b => (
+                                              <option key={b.batch_tag} value={b.batch_tag}>{b.batch_name}</option>
+                                            ))}
+                                            <option value="unbatch">Unbatch</option>
+                                          </select>
+                                        </div>
+                                      </div>
                                     ))}
-                                    <option value="unbatch">Unbatch</option>
-                                  </select>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       );
@@ -439,19 +497,54 @@ const CustomerDashboard: React.FC = () => {
                     {unbatched.length > 0 && (
                       <div className="border rounded-lg p-4 bg-gray-50">
                         <h3 className="text-lg font-semibold text-gray-700 mb-2">Unbatched Orders</h3>
-                        <div className="space-y-2">
-                          {unbatched.map(order => (
-                            <div key={order.id} className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between bg-pink-50">
-                              <div>
-                                <div className="font-medium text-gray-800">{order.materialType} ({order.orderId})</div>
-                                <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
-                                <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
+                        <div className="space-y-4">
+                          {MATERIAL_PRIORITY.map(materialType => {
+                            const materialOrders = unbatched.filter(order => order.materialType === materialType);
+                            
+                            if (materialOrders.length === 0) return null;
+                            
+                            // Sort orders by delivery date (soonest first)
+                            const sortedMaterialOrders = materialOrders.sort((a, b) => 
+                              new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime()
+                            );
+                            
+                            return (
+                              <div key={materialType}>
+                                <div className="bg-gradient-to-r from-gray-100 to-gray-200 px-3 py-2 rounded-lg mb-2">
+                                  <h4 className="text-sm font-semibold text-gray-700 capitalize">
+                                    {materialType} ({materialOrders.length})
+                                  </h4>
+                                </div>
+                                <div className="space-y-2 ml-2">
+                                  {sortedMaterialOrders.map(order => (
+                                    <div 
+                                      key={order.id} 
+                                      className="border rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between bg-pink-50 hover:bg-pink-100 cursor-pointer transition-colors"
+                                                                             onClick={() => handleOrderClick(order)}
+                                    >
+                                      <div>
+                                        <div className="font-medium text-gray-800">
+                                          {order.materialType} (
+                                                                                     <span 
+                                             className="text-blue-600 underline cursor-pointer hover:text-blue-800"
+                                             onClick={() => handleOrderClick(order)}
+                                           >
+                                            {order.orderId}
+                                          </span>
+                                          )
+                                        </div>
+                                        <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
+                                        <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
+                                      </div>
+                                      <div className="mt-2 md:mt-0">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{order.isDelivered ? 'Ready' : 'Pending'}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                              <div className="mt-2 md:mt-0">
-                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{order.isDelivered ? 'Ready' : 'Pending'}</span>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}

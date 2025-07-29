@@ -13,6 +13,18 @@ import SizeChart from './components/SizeChart';
 import SuperAdmin from './components/SuperAdmin';
 import CustomerDashboard from './components/CustomerDashboard';
 import { isFeatureEnabled } from './config/features';
+import { testSupabaseConnection } from './lib/supabase';
+
+// Test Supabase connection on app load
+testSupabaseConnection().then(isConnected => {
+  if (!isConnected) {
+    console.error('🚨 Supabase connection failed. Please check:');
+    console.error('1. Your .env file has correct VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
+    console.error('2. Your Supabase project is active at https://supabase.com');
+    console.error('3. You have run the SQL schema from supabase-schema.sql');
+    console.error('4. Row Level Security policies are set up correctly');
+  }
+});
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode, allowedRoles?: string[] }> = ({ 
   children, 
@@ -142,7 +154,7 @@ function App() {
   return (
     <AuthProvider>
       <DataProvider>
-        <Router>
+        <Router future={{ v7_startTransition: true }}>
           <AppRoutes />
         </Router>
       </DataProvider>

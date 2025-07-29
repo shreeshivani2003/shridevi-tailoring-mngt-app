@@ -25,6 +25,9 @@ const ORDER_CATEGORIES = [
   'others',
 ];
 
+// Define material priority order for listing
+const MATERIAL_PRIORITY = ['blouse', 'saree', 'works', 'lehenga', 'chudi', 'others'];
+
 const ORDER_TYPES = [
   { value: 'all', label: 'All Orders', icon: Package },
   { value: 'regular', label: 'Regular', icon: Package },
@@ -53,25 +56,17 @@ const Orders: React.FC = () => {
   const sortedOrders = [...ongoingOrders].sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime());
 
   // Filter by category
-  const filteredOrders = selectedCategory === 'all'
-    ? sortedOrders
-    : sortedOrders.filter(order => order.materialType === selectedCategory);
-
-  // Filter by order type
-  const orderTypeFilteredOrders = selectedOrderType === 'all'
-    ? filteredOrders
-    : filteredOrders.filter(order => order.orderType === selectedOrderType);
-
-  // Search filter
-  const searchFilteredOrders = searchQuery
-    ? orderTypeFilteredOrders.filter(order => {
-        const customer = customers.find(c => c.id === order.customerId);
-        return (
-          order.orderId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (customer && customer.name.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
-      })
-    : orderTypeFilteredOrders;
+  const searchFilteredOrders = sortedOrders.filter(order => {
+    const matchesSearch = !searchQuery || 
+      order.orderId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.materialType.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesCategory = selectedCategory === 'all' || order.materialType === selectedCategory;
+    const matchesOrderType = selectedOrderType === 'all' || order.orderType === selectedOrderType;
+    
+    return matchesSearch && matchesCategory && matchesOrderType;
+  });
 
   // Category counts
   const categoryCounts = ORDER_CATEGORIES.reduce((acc, cat) => {
@@ -79,8 +74,15 @@ const Orders: React.FC = () => {
     return acc;
   }, {} as Record<string, number>);
 
-  // Group orders by due date
+  // Get grouped orders with material filter
   const getGroupedOrders = (orderType: 'regular' | 'emergency' | 'alter', materialType?: string) => {
+    let filteredOrders = ongoingOrders.filter(order => order.orderType === orderType);
+    
+    // Apply material filter if specified
+    if (materialType && materialType !== 'all') {
+      filteredOrders = filteredOrders.filter(order => order.materialType === materialType);
+    }
+    
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -89,38 +91,40 @@ const Orders: React.FC = () => {
     const threeDaysFromNow = new Date(today);
     threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
 
-    let typeOrders = ongoingOrders.filter(order => order.orderType === orderType);
-    if (materialType && materialType !== 'all') {
-      typeOrders = typeOrders.filter(order => order.materialType === materialType);
-    }
-
     return {
-      'Past Due': typeOrders.filter(order => new Date(order.deliveryDate) < today),
-      'Due in 1 Day': typeOrders.filter(order => {
+      'Past Due': filteredOrders.filter(order => new Date(order.deliveryDate) < today),
+      'Due in 1 Day': filteredOrders.filter(order => {
         const deliveryDate = new Date(order.deliveryDate);
         return deliveryDate >= today && deliveryDate <= tomorrow;
       }),
-      'Due in 2 Days': typeOrders.filter(order => {
+      'Due in 2 Days': filteredOrders.filter(order => {
         const deliveryDate = new Date(order.deliveryDate);
         return deliveryDate > tomorrow && deliveryDate <= twoDaysFromNow;
       }),
-      'Due in 3 Days': typeOrders.filter(order => {
+      'Due in 3 Days': filteredOrders.filter(order => {
         const deliveryDate = new Date(order.deliveryDate);
         return deliveryDate > twoDaysFromNow && deliveryDate <= threeDaysFromNow;
       })
     };
   };
 
-  // This week's orders (next 7 days)
+  // Get this week's orders with material filter
   const getThisWeeksOrders = () => {
     const today = new Date();
-    const weekFromNow = new Date(today);
-    weekFromNow.setDate(weekFromNow.getDate() + 7);
+    const endOfWeek = new Date(today);
+    endOfWeek.setDate(today.getDate() + 7);
     
-    return ongoingOrders.filter(order => {
+    let filteredOrders = ongoingOrders.filter(order => {
       const deliveryDate = new Date(order.deliveryDate);
-      return deliveryDate >= today && deliveryDate <= weekFromNow;
+      return deliveryDate >= today && deliveryDate <= endOfWeek;
     });
+    
+    // Apply material filter
+    if (selectedCategory !== 'all') {
+      filteredOrders = filteredOrders.filter(order => order.materialType === selectedCategory);
+    }
+    
+    return filteredOrders;
   };
 
   // Full Month Calendar helpers
@@ -150,10 +154,22 @@ const Orders: React.FC = () => {
   };
 
   const getOrdersForDate = (date: Date) => {
-    return ongoingOrders.filter(order => {
-      const orderDate = new Date(order.deliveryDate);
-      return orderDate.toDateString() === date.toDateString();
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    let filteredOrders = ongoingOrders.filter(order => {
+      const deliveryDate = new Date(order.deliveryDate);
+      return deliveryDate >= startOfDay && deliveryDate <= endOfDay;
     });
+    
+    // Apply material filter
+    if (selectedCategory !== 'all') {
+      filteredOrders = filteredOrders.filter(order => order.materialType === selectedCategory);
+    }
+    
+    return filteredOrders;
   };
 
   const handleOrderClick = (order: any) => {
@@ -187,22 +203,38 @@ const Orders: React.FC = () => {
   // Add a function to get orders due in 7 days
   const getDueIn7DaysCount = () => {
     const today = new Date();
-    const sevenDaysFromNow = new Date(today);
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-    return ongoingOrders.filter(order => {
+    const endOfWeek = new Date(today);
+    endOfWeek.setDate(today.getDate() + 7);
+    
+    let filteredOrders = ongoingOrders.filter(order => {
       const deliveryDate = new Date(order.deliveryDate);
-      return deliveryDate > today && deliveryDate <= sevenDaysFromNow;
-    }).length;
+      return deliveryDate >= today && deliveryDate <= endOfWeek;
+    });
+    
+    // Apply material filter
+    if (selectedCategory !== 'all') {
+      filteredOrders = filteredOrders.filter(order => order.materialType === selectedCategory);
+    }
+    
+    return filteredOrders.length;
   };
 
   const getDueIn7DaysOrders = () => {
     const today = new Date();
-    const sevenDaysFromNow = new Date(today);
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-    return ongoingOrders.filter(order => {
+    const endOfWeek = new Date(today);
+    endOfWeek.setDate(today.getDate() + 7);
+    
+    let filteredOrders = ongoingOrders.filter(order => {
       const deliveryDate = new Date(order.deliveryDate);
-      return deliveryDate > today && deliveryDate <= sevenDaysFromNow;
+      return deliveryDate >= today && deliveryDate <= endOfWeek;
     });
+    
+    // Apply material filter
+    if (selectedCategory !== 'all') {
+      filteredOrders = filteredOrders.filter(order => order.materialType === selectedCategory);
+    }
+    
+    return filteredOrders.sort((a, b) => new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime());
   };
 
   if (loading) {
@@ -318,46 +350,73 @@ const Orders: React.FC = () => {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Material</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch</th> {/* Add Batch column */}
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {searchFilteredOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-8 text-gray-400">No orders found</td>
-                  </tr>
-                ) : (
-                  searchFilteredOrders.map(order => {
-                    const customer = customers.find(c => c.id === order.customerId);
-                    const orderBatch = batches.find(b => b.batch_tag === order.batch_tag);
-                    return (
-                      <tr key={order.id} className="hover:bg-pink-50 cursor-pointer" onClick={() => handleOrderClick(order)}>
-                        <td className="px-4 py-2 font-mono text-pink-700">
-                          <span className="text-pink-700 underline cursor-pointer hover:text-pink-900 mr-1" onClick={e => { e.stopPropagation(); navigate(`/orders/${order.orderId}`); }}>{order.orderId}</span>
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className="text-pink-700 underline cursor-pointer hover:text-pink-900 mr-1" onClick={e => { e.stopPropagation(); navigate(`/customers/${order.customerId}`); }}>{customer?.name}</span>
-                        </td>
-                        <td className="px-4 py-2 capitalize">{order.orderType}</td>
-                        <td className="px-4 py-2 capitalize">{order.materialType}</td>
-                        <td className="px-4 py-2">{orderBatch ? orderBatch.batch_name : '-'}</td> {/* Show batch name or '-' */}
-                        <td className="px-4 py-2">{new Date(order.deliveryDate).toLocaleDateString()}</td>
-                        <td className="px-4 py-2">₹{order.approximateAmount || 0}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+            {searchFilteredOrders.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">No orders found</div>
+            ) : (
+              <div className="space-y-6">
+                {/* Group orders by material type in priority order */}
+                {MATERIAL_PRIORITY.map(materialType => {
+                  const materialOrders = searchFilteredOrders.filter(order => order.materialType === materialType);
+                  
+                  if (materialOrders.length === 0) return null;
+                  
+                  // Sort orders by delivery date (soonest first)
+                  const sortedMaterialOrders = materialOrders.sort((a, b) => 
+                    new Date(a.deliveryDate).getTime() - new Date(b.deliveryDate).getTime()
+                  );
+                  
+                  return (
+                    <div key={materialType} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="bg-gradient-to-r from-pink-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+                        <h3 className="text-lg font-semibold text-gray-800 capitalize">
+                          {materialType} Orders ({materialOrders.length})
+                        </h3>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hint</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-100">
+                            {sortedMaterialOrders.map(order => {
+                              const customer = customers.find(c => c.id === order.customerId);
+                              const orderBatch = batches.find(b => b.batch_tag === order.batch_tag);
+                              return (
+                                <tr key={order.id} className="hover:bg-pink-50 cursor-pointer" onClick={() => handleOrderClick(order)}>
+                                  <td className="px-4 py-3 font-mono text-pink-700">
+                                    <span className="text-pink-700 underline cursor-pointer hover:text-pink-900 mr-1" onClick={e => { e.stopPropagation(); navigate(`/orders/${order.orderId}`); }}>{order.orderId}</span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className="text-pink-700 underline cursor-pointer hover:text-pink-900 mr-1" onClick={e => { e.stopPropagation(); navigate(`/customers/${order.customerId}`); }}>{customer?.name}</span>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{order.hint || '-'}</td>
+                                  <td className="px-4 py-3">{orderBatch ? orderBatch.batch_name : '-'}</td>
+                                  <td className="px-4 py-3">{new Date(order.deliveryDate).toLocaleDateString()}</td>
+                                  <td className="px-4 py-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {order.isDelivered ? 'Completed' : order.currentStatus || 'Pending'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -444,6 +503,9 @@ const Orders: React.FC = () => {
                         })}
                       </div>
                     )}
+                    {expandedGroup === `regular-${groupName}` && groupOrders.length === 0 && (
+                      <div className="text-xs text-gray-500 text-center py-2">No orders in this group</div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -496,6 +558,9 @@ const Orders: React.FC = () => {
                           );
                         })}
                       </div>
+                    )}
+                    {expandedGroup === `emergency-${groupName}` && groupOrders.length === 0 && (
+                      <div className="text-xs text-gray-500 text-center py-2">No orders in this group</div>
                     )}
                   </button>
                 ))}
@@ -550,6 +615,9 @@ const Orders: React.FC = () => {
                         })}
                       </div>
                     )}
+                    {expandedGroup === `alter-${groupName}` && groupOrders.length === 0 && (
+                      <div className="text-xs text-gray-500 text-center py-2">No orders in this group</div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -601,18 +669,24 @@ const Orders: React.FC = () => {
                         className={`min-h-12 p-1 border-r border-b border-gray-200 text-left transition-all ${
                           !isCurrentMonth ? 'bg-gray-50' : 'bg-white'
                         } ${
-                          isToday ? 'bg-blue-100 border-blue-300' :
-                          isSelected ? 'bg-blue-50 border-blue-200' :
+                          isToday ? 'bg-gradient-to-br from-pink-400 to-pink-500 text-white border-pink-500 shadow-lg' :
+                          isSelected ? 'bg-pink-50 border-pink-200' :
                           'hover:bg-gray-50'
                         }`}
                       >
                         <div className={`text-xs font-medium mb-1 ${
+                          isToday ? 'text-white font-bold' :
                           isCurrentMonth ? 'text-gray-800' : 'text-gray-400'
                         }`}>
                           {date.getDate()}
+                          {isToday && (
+                            <span className="ml-1 text-xs">• Today</span>
+                          )}
                         </div>
                         {ordersForDate.length > 0 && (
-                          <div className="w-2 h-2 bg-red-500 rounded-full mx-auto"></div>
+                          <div className={`w-2 h-2 rounded-full mx-auto ${
+                            isToday ? 'bg-white' : 'bg-red-500'
+                          }`}></div>
                         )}
                       </button>
                     );

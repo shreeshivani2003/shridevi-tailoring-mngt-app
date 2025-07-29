@@ -30,6 +30,7 @@ interface DataContextType {
   getReadyForDeliveryOrders: () => Order[];
   loading: boolean;
   updateOrderBatchTag: (orderId: string, batchTag: string | null) => Promise<void>;
+  loadData: () => Promise<void>; // <-- expose loadData
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -753,7 +754,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       getReadyForDeliveryOrders,
       loading,
       addMultipleOrders,
-      updateOrderBatchTag
+      updateOrderBatchTag,
+      loadData // <-- expose loadData
     }}>
       {children}
     </DataContext.Provider>
