@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { X, Calendar, DollarSign, FileText, Camera, Search, User, AlertTriangle, Package, Scissors } from 'lucide-react';
-import { Customer, MaterialType, OrderType } from '../types';
+import { Customer, MaterialType, OrderType, BlouseMaterialCategory } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from './Layout';
 import { supabase } from '../lib/supabase';
@@ -23,7 +23,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
   order, 
   mode = 'add' 
 }) => {
-  const { addMultipleOrders, updateOrder, searchCustomers, orders, loadData } = useData();
+  const { addMultipleOrders, addMultipleOrdersOptimized, updateOrder, searchCustomers, orders, loadData } = useData();
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(initialCustomer || null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [showCustomerResults, setShowCustomerResults] = useState(false);
@@ -40,6 +40,10 @@ const OrderModal: React.FC<OrderModalProps> = ({
     liningClothGiven: false, // for blouse/chudi
     fallsClothGiven: false, // for saree
     sareeServiceType: '', // for saree
+    sizeBookNo: '', // Page number where customer size is noted
+    blouseMaterialCategory: 'normal' as BlouseMaterialCategory, // 'normal' or 'piping'
+    pipingDetails: '',
+    fallsDetails: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
@@ -133,13 +137,26 @@ const OrderModal: React.FC<OrderModalProps> = ({
     setMaterials(mats => mats.map((mat, i) => i === idx ? { ...mat, [field]: value } : mat));
   };
   const handleAddMaterial = () => {
-    const today = new Date();
-    today.setDate(today.getDate() + 7);
-    const defaultDate = today.toISOString().split('T')[0];
+    // Use the delivery date from the first material if available, otherwise use default
+    const firstMaterialDeliveryDate = materials[0]?.deliveryDate;
+    const defaultDate = firstMaterialDeliveryDate || (() => {
+      const today = new Date();
+      today.setDate(today.getDate() + 7);
+      return today.toISOString().split('T')[0];
+    })();
+    
+    // Use the size book number from the first material if available
+    const firstMaterialSizeBookNo = formData.sizeBookNo;
+    
     setMaterials(mats => [
       ...mats,
       { ...initialMaterial(), deliveryDate: formData.orderType === 'regular' ? defaultDate : '' }
     ]);
+    
+    // Set the size book number for the new material to match the first material
+    if (firstMaterialSizeBookNo) {
+      setFormData(prev => ({ ...prev, sizeBookNo: firstMaterialSizeBookNo }));
+    }
   };
   const handleRemoveMaterial = (idx: number) => setMaterials(mats => mats.length > 1 ? mats.filter((_, i) => i !== idx) : mats);
   const handleEditMaterial = (idx: number) => setEditingIndex(idx);
@@ -159,6 +176,11 @@ const OrderModal: React.FC<OrderModalProps> = ({
         liningClothGiven: order.liningClothGiven || false,
         fallsClothGiven: order.fallsClothGiven || false,
         sareeServiceType: order.sareeServiceType || '',
+        sizeBookNo: order.sizeBookNo || '',
+        blouseMaterialCategory: order.blouseMaterialCategory || 'normal',
+        pipingDetails: order.pipingDetails || '',
+        fallsDetails: order.fallsDetails || '',
+
       });
     } else if (mode === 'add') {
       // Reset form for new orders
@@ -175,6 +197,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
         liningClothGiven: false,
         fallsClothGiven: false,
         sareeServiceType: '',
+                    sizeBookNo: '',
+        blouseMaterialCategory: 'normal' as BlouseMaterialCategory,
+        pipingDetails: '',
+        fallsDetails: '',
+
+
       });
       setCustomizeEachItem({});
       setCustomItems({});
@@ -276,27 +304,30 @@ const OrderModal: React.FC<OrderModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('OrderModal handleSubmit called');
-    // Ensure all materials have a delivery date before validation
-    setMaterials(mats => mats.map(mat => {
-      if (!mat.deliveryDate && formData.orderType === 'regular') {
-        const today = new Date();
-        today.setDate(today.getDate() + 7);
-        return { ...mat, deliveryDate: today.toISOString().split('T')[0] };
-      }
-      return mat;
-    }));
-    // Wait for state update
-    await new Promise(resolve => setTimeout(resolve, 0));
+    
     if (!selectedCustomer) {
       notification.show('Please select a customer first');
       console.log('No customer selected');
       return;
     }
+    
     setIsSubmitting(true);
+    
     try {
       const givenDate = new Date();
+      
+      // Pre-validate all materials without blocking UI
+      const updatedMaterials = materials.map(mat => {
+        if (!mat.deliveryDate && formData.orderType === 'regular') {
+          const today = new Date();
+          today.setDate(today.getDate() + 7);
+          return { ...mat, deliveryDate: today.toISOString().split('T')[0] };
+        }
+        return mat;
+      });
+      
       // Validate all materials
-      for (const [idx, mat] of materials.entries()) {
+      for (const [idx, mat] of updatedMaterials.entries()) {
         if (!mat.materialType || !mat.numberOfItems || !mat.deliveryDate) {
           notification.show(`Please fill all required fields for Material ${idx + 1}`);
           console.log('Validation failed for material', idx, mat);
@@ -304,29 +335,67 @@ const OrderModal: React.FC<OrderModalProps> = ({
           return;
         }
       }
+      
       console.log('All validations passed, submitting orders');
+      
+      // Optimized batch handling - do this once before order creation
       let batchTagToUse = '';
-      // Helper to robustly create a new batch with the next available number
-      const createNextAvailableBatch = async () => {
-        let attempt = 0;
-        let maxAttempts = 10;
-        let newTag = '';
-        let newName = '';
+      console.log('Batch selection:', selectedBatch);
+      
+      if (selectedBatch === 'new') {
+        console.log('Creating new batch for customer:', selectedCustomer.name);
+        notification.show('Creating new batch...');
         
-        while (attempt < maxAttempts) {
-          // Always fetch fresh batch data from the backend
-          const { data: latestBatches, error: fetchError } = await supabase
+        // Simplified batch creation without multiple retries
+        const { data: latestBatches } = await supabase
+          .from('batches')
+          .select('batch_tag, batch_name')
+          .eq('customer_id', selectedCustomer.id)
+          .order('created_at', { ascending: true });
+          
+        const customerBatchNumbers = (latestBatches || [])
+          .filter(b => b.batch_name.startsWith('Batch '))
+          .map(b => parseInt(b.batch_name.replace('Batch ', ''), 10))
+          .filter(n => !isNaN(n));
+          
+        let nextBatchNum = 1;
+        while (customerBatchNumbers.includes(nextBatchNum)) {
+          nextBatchNum++;
+        }
+        
+        const newTag = `batch_${nextBatchNum}`;
+        const newName = `Batch ${nextBatchNum}`;
+        
+        const { error: insertError } = await supabase.from('batches').insert({
+          customer_id: selectedCustomer.id,
+          batch_tag: newTag,
+          batch_name: newName
+        });
+        
+        if (insertError) {
+          throw new Error(`Failed to create batch: ${insertError.message}`);
+        }
+        
+        batchTagToUse = newTag;
+        console.log('New batch created:', newTag);
+        notification.show(`Created new batch: ${newName}`);
+        
+        // Update local state without full reload
+        setBatches(prev => [...prev, { batch_tag: newTag, batch_name: newName }]);
+        setSelectedBatch(newTag);
+      } else if (selectedBatch && selectedBatch !== 'none') {
+        batchTagToUse = selectedBatch;
+        console.log('Using existing batch:', selectedBatch);
+      } else {
+        console.log('No batch selected, will create new batch automatically');
+        // Always create a batch for single items
+        try {
+          const { data: latestBatches } = await supabase
             .from('batches')
             .select('batch_tag, batch_name')
             .eq('customer_id', selectedCustomer.id)
             .order('created_at', { ascending: true });
             
-          if (fetchError) {
-            console.error('Error fetching batches:', fetchError);
-            throw new Error('Failed to fetch existing batches');
-          }
-          
-          // Calculate next batch number from fresh data
           const customerBatchNumbers = (latestBatches || [])
             .filter(b => b.batch_name.startsWith('Batch '))
             .map(b => parseInt(b.batch_name.replace('Batch ', ''), 10))
@@ -337,72 +406,43 @@ const OrderModal: React.FC<OrderModalProps> = ({
             nextBatchNum++;
           }
           
-          newTag = `batch_${nextBatchNum}`;
-          newName = `Batch ${nextBatchNum}`;
+          const newTag = `batch_${nextBatchNum}`;
+          const newName = `Batch ${nextBatchNum}`;
           
-          // Insert the new batch
           const { error: insertError } = await supabase.from('batches').insert({
             customer_id: selectedCustomer.id,
             batch_tag: newTag,
             batch_name: newName
           });
           
-          if (!insertError) {
-            // Successfully created batch - refetch the complete batch list
-            const { data: updatedBatches, error: refetchError } = await supabase
-              .from('batches')
-              .select('batch_tag, batch_name')
-              .eq('customer_id', selectedCustomer.id)
-              .order('created_at', { ascending: true });
-              
-            if (!refetchError && updatedBatches) {
-              // Update UI state with fresh batch list
-              setBatches(updatedBatches);
-              // Set the newly created batch as selected
-              setSelectedBatch(newTag);
-              console.log(`Successfully created and selected new batch: ${newName} (${newTag})`);
-              return { batch_tag: newTag, batch_name: newName };
-            } else {
-              console.error('Error refetching batches after creation:', refetchError);
-              // Fallback: update local state manually
-              setBatches(prev => [...prev, { batch_tag: newTag, batch_name: newName }]);
-              setSelectedBatch(newTag);
-              return { batch_tag: newTag, batch_name: newName };
-            }
-          } else if (insertError.code === '23505') { // Unique constraint violation
-            console.log(`Batch ${newName} already exists, retrying...`);
-            attempt++;
-            continue;
+          if (insertError) {
+            console.error('Failed to auto-create batch:', insertError);
+            // Use a fallback batch tag
+            batchTagToUse = `batch_${Date.now()}`;
           } else {
-            console.error('Error creating batch:', insertError);
-            throw new Error(`Failed to create batch: ${insertError.message}`);
+            batchTagToUse = newTag;
+            console.log('Auto-created batch:', newTag);
+            notification.show(`Auto-created batch: ${newName}`);
+            
+            // Update local state
+            setBatches(prev => [...prev, { batch_tag: newTag, batch_name: newName }]);
+            setSelectedBatch(newTag);
           }
+        } catch (error) {
+          console.error('Error creating batch:', error);
+          // Use a fallback batch tag
+          batchTagToUse = `batch_${Date.now()}`;
         }
-        
-        throw new Error('Failed to create a unique batch after multiple attempts.');
-      };
-      // Only create a new batch if user selected 'New Batch'
-      if (selectedBatch === 'new') {
-        console.log('Creating new batch for customer:', selectedCustomer.name);
-        notification.show('Creating new batch...');
-        const { batch_tag: newTag } = await createNextAvailableBatch();
-        batchTagToUse = newTag;
-        console.log('New batch created and selected:', newTag);
-        notification.show(`Created new batch: ${newTag.replace('batch_', 'Batch ')}`);
-        await loadData(); // Refresh global state after batch creation
-      } else if (selectedBatch && selectedBatch !== 'none') {
-        batchTagToUse = selectedBatch;
-        console.log('Using existing batch:', selectedBatch);
-      } else {
-        batchTagToUse = '';
-        console.log('No batch selected for this order');
       }
-      // Prepare and submit each material as an order
-      for (const [matIdx, mat] of materials.entries()) {
+      
+      // Prepare all orders in memory first
+      const allOrders = [];
+      
+      for (const [matIdx, mat] of updatedMaterials.entries()) {
         if (customizeEachItem[matIdx]) {
           for (let i = 0; i < mat.numberOfItems; i++) {
             const item = customItems[matIdx]?.[i] || {};
-            const orderData = {
+            allOrders.push({
               customerId: selectedCustomer.id,
               customerName: selectedCustomer.name,
               orderType: formData.orderType,
@@ -420,40 +460,48 @@ const OrderModal: React.FC<OrderModalProps> = ({
               fallsClothGiven: mat.materialType === 'saree' ? item.fallsClothGiven : false,
               sareeServiceType: mat.materialType === 'saree' ? item.sareeServiceType : '',
               batchTag: batchTagToUse || undefined,
-            };
-            console.log('Order payload being sent:', orderData);
-            await addMultipleOrders(orderData);
-            await loadData(); // Refresh global state after adding order
+              sizeBookNo: formData.sizeBookNo,
+              blouseMaterialCategory: mat.materialType === 'blouse' ? formData.blouseMaterialCategory : undefined,
+            });
           }
         } else {
-          // Normal: one order for all items
-          const orderData = {
-            customerId: selectedCustomer.id,
-            customerName: selectedCustomer.name,
-            orderType: formData.orderType,
-            materialType: mat.materialType as MaterialType,
-            hint: mat.notes,
-            description: mat.notes,
-            referenceImage: '',
-            notes: mat.notes,
-            deliveryDate: new Date(mat.deliveryDate),
-            givenDate,
-            approximateAmount: parseFloat(mat.amount) || 0,
-            numberOfItems: mat.numberOfItems,
-            editDeliveryDate: false,
-            liningClothGiven: mat.liningClothGiven,
-            fallsClothGiven: mat.fallsClothGiven,
-            sareeServiceType: mat.sareeServiceType,
-            batchTag: batchTagToUse || undefined,
-          };
-          console.log('Order payload being sent:', orderData);
-          await addMultipleOrders(orderData);
-          await loadData(); // Refresh global state after adding order
+                      console.log('Material notes/hint:', mat.notes);
+            allOrders.push({
+              customerId: selectedCustomer.id,
+              customerName: selectedCustomer.name,
+              orderType: formData.orderType,
+              materialType: mat.materialType as MaterialType,
+              hint: mat.notes,
+              description: mat.notes,
+              referenceImage: '',
+              notes: mat.notes,
+              deliveryDate: new Date(mat.deliveryDate),
+              givenDate,
+              approximateAmount: parseFloat(mat.amount) || 0,
+              numberOfItems: mat.numberOfItems,
+              editDeliveryDate: false,
+              liningClothGiven: mat.liningClothGiven,
+              fallsClothGiven: mat.fallsClothGiven,
+              sareeServiceType: mat.sareeServiceType,
+              batchTag: batchTagToUse || undefined,
+              sizeBookNo: formData.sizeBookNo,
+              blouseMaterialCategory: mat.materialType === 'blouse' ? formData.blouseMaterialCategory : undefined,
+            });
         }
       }
-      notification.show(`Successfully created order(s)!`);
-      console.log('Order(s) submitted successfully');
+      
+      // Submit all orders in a single optimized operation
+      console.log(`Submitting ${allOrders.length} orders with batch tag: ${batchTagToUse}`);
+      console.log('First order hint:', allOrders[0]?.hint);
+      console.log('All orders:', allOrders.map(o => ({ orderId: o.customerId, hint: o.hint, batchTag: o.batchTag })));
+      notification.show(`Creating ${allOrders.length} order(s)...`);
+      
+      await addMultipleOrdersOptimized(allOrders);
+      
+      notification.show(`Successfully created ${allOrders.length} order(s)!`);
+      console.log('Orders submitted successfully');
       onClose();
+      
       if (mode === 'add') {
         notification.show('Order added successfully!');
         // WhatsApp integration
@@ -480,6 +528,15 @@ const OrderModal: React.FC<OrderModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      {isSubmitting && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-60">
+          <div className="bg-white rounded-lg p-8 flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600"></div>
+            <p className="text-lg font-semibold text-gray-800">Submitting Order...</p>
+            <p className="text-sm text-gray-600">Please wait while we process your order</p>
+          </div>
+        </div>
+      )}
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
@@ -678,36 +735,62 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="35"
+                      value={materials[0].numberOfItems}
+                      onChange={e => handleMaterialChange(0, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                      required
+                    />
+                  </div>
+                </div>
+                {/* Size Book Number and Blouse Material Category */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end mt-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Size Book No.</label>
                     <div className="relative">
                       <input
-                        type="number"
-                        min="1"
-                        max="35"
-                        value={materials[0].numberOfItems}
-                        onChange={e => handleMaterialChange(0, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
-                        className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                        required
+                        type="text"
+                        value={formData.sizeBookNo}
+                        onChange={e => setFormData({ ...formData, sizeBookNo: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                        placeholder="Page number where size is noted"
                       />
-                      <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex flex-col">
-                        <button
-                          type="button"
-                          onClick={() => handleMaterialChange(0, 'numberOfItems', Math.min(35, materials[0].numberOfItems + 1))}
-                          disabled={materials[0].numberOfItems >= 35}
-                          className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
-                        >
-                          ▲
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleMaterialChange(0, 'numberOfItems', Math.max(1, materials[0].numberOfItems - 1))}
-                          disabled={materials[0].numberOfItems <= 1}
-                          className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
-                        >
-                          ▼
-                        </button>
-                      </div>
+
                     </div>
                   </div>
+                  {materials[0].materialType === 'blouse' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
+                      <select
+                        value={formData.blouseMaterialCategory}
+                        onChange={e => setFormData({ ...formData, blouseMaterialCategory: e.target.value as BlouseMaterialCategory })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="piping">Piping</option>
+                      </select>
+                    </div>
+                  )}
+                  {materials[0].materialType === 'saree' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
+                      <select
+                        value={materials[0].sareeServiceType}
+                        onChange={e => handleMaterialChange(0, 'sareeServiceType', e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                        required
+                      >
+                        <option value="Falls Stitching">Falls Stitching</option>
+                        <option value="Falls Hemming">Falls Hemming</option>
+                        <option value="Saree Knot">Saree Knot</option>
+                      </select>
+                    </div>
+                  )}
+
+
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
                   <div>
@@ -796,6 +879,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
                     disabled={customizeEachItem[0]}
                   />
                 </div>
+
+
                 {materials[0].materialType === 'saree' && (
                   <div className="flex flex-col gap-2 mt-2">
                     <div className="flex items-center gap-2">
@@ -811,20 +896,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                         Falls Cloth Given?
                       </label>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Saree Service Type</label>
-                      <select
-                        value={materials[0].sareeServiceType}
-                        onChange={e => handleMaterialChange(0, 'sareeServiceType', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                        required
-                        disabled={customizeEachItem[0]}
-                      >
-                        <option value="Falls Stitching">Falls Stitching</option>
-                        <option value="Falls Hemming">Falls Hemming</option>
-                        <option value="Saree Knot">Saree Knot</option>
-                      </select>
-                    </div>
+
                   </div>
                 )}
                 {/* Customization toggle and table for material 1 */}
@@ -851,7 +923,13 @@ const OrderModal: React.FC<OrderModalProps> = ({
                             <th className="px-4 py-2 font-semibold">Delivery Date</th>
                             <th className="px-4 py-2 font-semibold">Hint</th>
                             <th className="px-4 py-2 font-semibold">Amount</th>
-                            {(materials[0].materialType === 'blouse' || materials[0].materialType === 'chudi') && (
+                            {materials[0].materialType === 'blouse' && (
+                              <>
+                                <th className="px-4 py-2 font-semibold">Lining Cloth</th>
+                                <th className="px-4 py-2 font-semibold">Service Type</th>
+                              </>
+                            )}
+                            {materials[0].materialType === 'chudi' && (
                               <th className="px-4 py-2 font-semibold">Lining Cloth</th>
                             )}
                             {materials[0].materialType === 'saree' && (
@@ -907,7 +985,28 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                   placeholder="₹"
                                 />
                               </td>
-                              {(materials[0].materialType === 'blouse' || materials[0].materialType === 'chudi') && (
+                              {materials[0].materialType === 'blouse' && (
+                                <>
+                                  <td className="px-4 py-2 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={customItems[0]?.[idx]?.liningClothGiven || false}
+                                      onChange={e => handleCustomItemChange(0, idx, 'liningClothGiven', e.target.checked)}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <select
+                                      value={customItems[0]?.[idx]?.serviceType || 'normal'}
+                                      onChange={e => handleCustomItemChange(0, idx, 'serviceType', e.target.value)}
+                                      className="border rounded px-2 py-1 w-full"
+                                    >
+                                      <option value="normal">Normal</option>
+                                      <option value="piping">Piping</option>
+                                    </select>
+                                  </td>
+                                </>
+                              )}
+                              {materials[0].materialType === 'chudi' && (
                                 <td className="px-4 py-2 text-center">
                                   <input
                                     type="checkbox"
@@ -980,36 +1079,48 @@ const OrderModal: React.FC<OrderModalProps> = ({
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="35"
+                          value={mat.numberOfItems}
+                          onChange={e => handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                          required
+                        />
+                      </div>
+                    </div>
+                    {/* Size Book Number and Blouse Material Category for additional materials */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end mt-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Size Book No.</label>
                         <div className="relative">
                           <input
-                            type="number"
-                            min="1"
-                            max="35"
-                            value={mat.numberOfItems}
-                            onChange={e => handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
-                            className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                            required
+                            type="text"
+                            value={formData.sizeBookNo}
+                            onChange={e => setFormData({ ...formData, sizeBookNo: e.target.value })}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                            placeholder="Page number where size is noted"
                           />
-                          <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex flex-col">
-                            <button
-                              type="button"
-                              onClick={() => handleMaterialChange(idx + 1, 'numberOfItems', Math.min(35, mat.numberOfItems + 1))}
-                              disabled={mat.numberOfItems >= 35}
-                              className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
-                            >
-                              ▲
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, mat.numberOfItems - 1))}
-                              disabled={mat.numberOfItems <= 1}
-                              className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
-                            >
-                              ▼
-                            </button>
-                          </div>
+
                         </div>
                       </div>
+                      {mat.materialType === 'blouse' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
+                          <select
+                            value={formData.blouseMaterialCategory}
+                            onChange={e => setFormData({ ...formData, blouseMaterialCategory: e.target.value as BlouseMaterialCategory })}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                          >
+                            <option value="normal">Normal</option>
+                            <option value="piping">Piping</option>
+                          </select>
+                        </div>
+                      )}
+
+
+
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
                       <div>
@@ -1092,6 +1203,8 @@ const OrderModal: React.FC<OrderModalProps> = ({
                         disabled={customizeEachItem[idx + 1]}
                       />
                     </div>
+
+
                     {mat.materialType === 'saree' && (
                       <div className="flex flex-col gap-2 mt-2">
                         <div className="flex items-center gap-2">
@@ -1108,7 +1221,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                           </label>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Saree Service Type</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
                           <select
                             value={mat.sareeServiceType}
                             onChange={e => handleMaterialChange(idx + 1, 'sareeServiceType', e.target.value)}
@@ -1147,7 +1260,13 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                 <th className="px-4 py-2 font-semibold">Delivery Date</th>
                                 <th className="px-4 py-2 font-semibold">Hint</th>
                                 <th className="px-4 py-2 font-semibold">Amount</th>
-                                {(mat.materialType === 'blouse' || mat.materialType === 'chudi') && (
+                                {mat.materialType === 'blouse' && (
+                                  <>
+                                    <th className="px-4 py-2 font-semibold">Lining Cloth</th>
+                                    <th className="px-4 py-2 font-semibold">Service Type</th>
+                                  </>
+                                )}
+                                {mat.materialType === 'chudi' && (
                                   <th className="px-4 py-2 font-semibold">Lining Cloth</th>
                                 )}
                                 {mat.materialType === 'saree' && (
@@ -1190,7 +1309,28 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                       placeholder="₹"
                                     />
                                   </td>
-                                  {(mat.materialType === 'blouse' || mat.materialType === 'chudi') && (
+                                  {mat.materialType === 'blouse' && (
+                                    <>
+                                      <td className="px-4 py-2 text-center">
+                                        <input
+                                          type="checkbox"
+                                          checked={customItems[idx + 1]?.[i]?.liningClothGiven || false}
+                                          onChange={e => handleCustomItemChange(idx + 1, i, 'liningClothGiven', e.target.checked)}
+                                        />
+                                      </td>
+                                      <td className="px-4 py-2">
+                                        <select
+                                          value={customItems[idx + 1]?.[i]?.serviceType || 'normal'}
+                                          onChange={e => handleCustomItemChange(idx + 1, i, 'serviceType', e.target.value)}
+                                          className="border rounded px-2 py-1 w-full"
+                                        >
+                                          <option value="normal">Normal</option>
+                                          <option value="piping">Piping</option>
+                                        </select>
+                                      </td>
+                                    </>
+                                  )}
+                                  {mat.materialType === 'chudi' && (
                                     <td className="px-4 py-2 text-center">
                                       <input
                                         type="checkbox"
@@ -1245,10 +1385,21 @@ const OrderModal: React.FC<OrderModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-8 py-3 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 transition-colors focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2"
+              className={`px-8 py-3 rounded-lg font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                isSubmitting 
+                  ? 'bg-gray-400 text-white cursor-not-allowed' 
+                  : 'bg-pink-600 text-white hover:bg-pink-700 focus:ring-pink-500'
+              }`}
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Submitting...' : 'Submit Order'}
+              {isSubmitting ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Submitting Order...
+                </div>
+              ) : (
+                'Submit Order'
+              )}
             </button>
           </div>
         </form>

@@ -23,6 +23,8 @@ export type MaterialType = 'blouse' | 'chudi' | 'saree' | 'works' | 'others' | '
 
 export type OrderType = 'regular' | 'emergency' | 'alter';
 
+export type BlouseMaterialCategory = 'normal' | 'piping';
+
 export interface Order {
   id: string;
   orderId: string;
@@ -43,6 +45,13 @@ export interface Order {
   isDelivered: boolean;
   createdAt: Date;
   batch_tag?: string;
+  // New fields for enhanced features
+  sizeBookNo?: string; // Page number where customer size is noted
+  blouseMaterialCategory?: BlouseMaterialCategory; // 'normal' or 'piping'
+  liningClothGiven?: boolean;
+  fallsClothGiven?: boolean;
+  sareeServiceType?: string;
+  numberOfItems?: number;
 }
 
 export interface StatusUpdate {
@@ -94,4 +103,7 @@ export interface OrderCreationData {
   fallsClothGiven?: boolean;
   sareeServiceType?: string;
   batchTag?: string;
+  sizeBookNo?: string;
+  blouseMaterialCategory?: BlouseMaterialCategory;
+
 }

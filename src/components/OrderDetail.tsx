@@ -40,6 +40,14 @@ const OrderDetail: React.FC = () => {
 
   const order = orders.find(o => o.orderId === orderId);
   const customer = order ? customers.find(c => c.id === order.customerId) : null;
+  
+  // Debug logging for falls cloth given
+  console.log('Order Detail Debug:', {
+    orderId: order?.orderId,
+    materialType: order?.materialType,
+    fallsClothGiven: order?.fallsClothGiven,
+    shouldShowFalls: order?.fallsClothGiven || order?.materialType === 'saree'
+  });
   const customerOrders = customer && order ? orders.filter(o => o.customerId === customer.id && o.id !== order.id) : [];
   const isSuperAdmin = user?.role === 'super_admin';
 
@@ -151,16 +159,14 @@ const OrderDetail: React.FC = () => {
         
         // If this was the final stage, show WhatsApp message info
         if (result.isFinalStage) {
-          const waNumber = customer?.whatsappNumber;
-          const phone = customer?.phone || '';
-          const defaultMessage = `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!`;
+          const waNumber = customer?.whatsappNumber || customer?.phone;
+          const defaultMessage = `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!\nFor picking, please come to the shop between 10am-6pm.`;
           if (waNumber) {
-            if (window.confirm('Send WhatsApp message to customer?')) {
-              const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(defaultMessage)}`;
-              window.open(url, '_blank');
-            }
+            const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(defaultMessage)}`;
+            window.open(url, '_blank');
+            alert('Order marked as delivered successfully. WhatsApp message sent automatically.');
           } else {
-            alert('Customer does not have a WhatsApp number. Please call the customer at ' + phone + ' to notify about delivery.');
+            alert('Order marked as delivered successfully. Customer does not have a WhatsApp number.');
           }
         }
       } catch (error) {
@@ -232,6 +238,14 @@ const OrderDetail: React.FC = () => {
                   </div>
                 </div>
                 
+                <div className="flex items-start gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <FileText className="w-5 h-5 text-gray-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-800 mb-1">Hint/Notes</p>
+                    <p className="text-sm text-gray-700">{order.hint || 'No hint provided'}</p>
+                  </div>
+                </div>
+                
                 <div className="flex items-center gap-3">
                   <Package className="w-5 h-5 text-gray-400" />
                   <div>
@@ -240,13 +254,95 @@ const OrderDetail: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-500">Description</p>
-                    <p className="font-medium">{order.description}</p>
+                {order.sizeBookNo && (
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-500">Size Book No.</p>
+                      <p className="font-medium">{order.sizeBookNo}</p>
+                    </div>
                   </div>
-                </div>
+                )}
+                
+                {order.blouseMaterialCategory && (
+                  <div className="flex items-center gap-3">
+                    <Package className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-500">Service Type</p>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        order.blouseMaterialCategory === 'piping' ? 'bg-purple-100 text-purple-800' : 
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {order.blouseMaterialCategory}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {order.sareeServiceType && (
+                  <div className="flex items-center gap-3">
+                    <Package className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-500">Saree Service Type</p>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        order.sareeServiceType === 'Falls Stitching' ? 'bg-green-100 text-green-800' :
+                        order.sareeServiceType === 'Falls Hemming' ? 'bg-orange-100 text-orange-800' :
+                        order.sareeServiceType === 'Saree Knot' ? 'bg-pink-100 text-pink-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {order.sareeServiceType}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {order.numberOfItems && order.numberOfItems > 1 && (
+                  <div className="flex items-center gap-3">
+                    <Package className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-500">Number of Items</p>
+                      <p className="font-medium">{order.numberOfItems}</p>
+                    </div>
+                  </div>
+                )}
+                
+                {order.liningClothGiven && (
+                  <div className="flex items-center gap-3">
+                    <CheckSquare className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-500">Lining Cloth Given</p>
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Yes
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {(order.fallsClothGiven || order.materialType === 'saree') && (
+                  <div className="flex items-center gap-3">
+                    <CheckSquare className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-500">Falls Cloth Given</p>
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Yes
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {order.batch_tag && (
+                  <div className="flex items-center gap-3">
+                    <Package className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-500">Batch Tag</p>
+                      <p className="font-medium">{order.batch_tag}</p>
+                    </div>
+                  </div>
+                )}
+                
+
+                
+
                 
                 <div className="flex items-center gap-3">
                   <Calendar className="w-5 h-5 text-gray-400" />
@@ -272,15 +368,7 @@ const OrderDetail: React.FC = () => {
                   </div>
                 </div>
                 
-                {order.notes && (
-                  <div className="flex items-start gap-3">
-                    <FileText className="w-5 h-5 text-gray-400 mt-0.5" />
-                    <div>
-                      <p className="text-sm text-gray-500">Notes</p>
-                      <p className="font-medium text-sm whitespace-pre-wrap">{order.notes}</p>
-                    </div>
-                  </div>
-                )}
+
                 
                 {order.referenceImage && (
                   <div className="flex items-start gap-3">
@@ -590,18 +678,17 @@ const OrderDetail: React.FC = () => {
                     // WhatsApp message logic
                     const completedStages = multiStageSelection.join(', ');
                     const remainingStages = stages.slice(lastStageIdx + 1).join(', ');
-                    const waNumber = customer?.whatsappNumber;
+                    const waNumber = customer?.whatsappNumber || customer?.phone;
                     if (waNumber) {
                       let msg = '';
                       if (lastStageIdx === stages.length - 1) {
-                        msg = `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery. Thank you for choosing Shri Devi Tailoring!`;
+                        msg = `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!\nFor picking, please come to the shop between 10am-6pm.`;
                       } else {
                         msg = `Hello ${order.customerName},\n\n${completedStages} completed for your order ${order.orderId}. Remaining: ${remainingStages || 'None'}.`;
                       }
-                      if (window.confirm('Send WhatsApp message to customer?')) {
-                        const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`;
-                        window.open(url, '_blank');
-                      }
+                      const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`;
+                      window.open(url, '_blank');
+                      alert('Status updated successfully. WhatsApp message sent automatically.');
                     }
                     setMultiStageSelection([]);
                   }}

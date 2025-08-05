@@ -63,6 +63,19 @@ const Status: React.FC = () => {
     return customer?.phone || '';
   };
 
+  // Helper: send WhatsApp message automatically
+  const sendWhatsAppMessage = (customer: any, message: string, notificationText: string) => {
+    const waNumber = customer ? (customer.whatsappNumber || customer.phone) : '';
+    if (customer && waNumber) {
+      const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
+      console.log('Opening WhatsApp:', url);
+      window.open(url, '_blank');
+      notification.show(notificationText);
+      return true;
+    }
+    return false;
+  };
+
   // Get delivered and ready for delivery orders
   const deliveredOrders = useMemo(() => getDeliveredOrders(), [orders, getDeliveredOrders]);
   const readyForDeliveryOrders = useMemo(() => getReadyForDeliveryOrders(), [orders, getReadyForDeliveryOrders]);
@@ -216,7 +229,7 @@ const Status: React.FC = () => {
         const hintText = order.hint ? `%0AHint: ${order.hint}` : '';
         const customMessage = `Hello ${order.customerName},%0AOrder ID: *${order.orderId}*%0A${stageText}%0ANext Status: *${nextStatus}*%0AMaterial: ${order.materialType}${hintText}`;
         
-        if (customer && customer.whatsappEnabled && waNumber) {
+        if (customer && waNumber) {
           const url = `https://wa.me/${waNumber}?text=${customMessage}`;
           console.log('Opening WhatsApp:', url);
           window.open(url, '_blank');
@@ -275,7 +288,7 @@ const Status: React.FC = () => {
         if (customer) {
           console.log('whatsappEnabled:', customer.whatsappEnabled, 'whatsappNumber:', customer.whatsappNumber, 'waNumber used:', waNumber);
         }
-        if (customer && customer.whatsappEnabled && waNumber) {
+        if (customer && waNumber) {
           const hintText = order.hint ? `%0AHint: ${order.hint}` : '';
           const msg = `Hello ${order.customerName},%0AOrder ID: *${order.orderId}*%0AStatus: *${nextStatus}*%0AMaterial: ${order.materialType}${hintText}`;
           const url = `https://wa.me/${waNumber}?text=${msg}`;

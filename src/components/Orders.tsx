@@ -378,10 +378,9 @@ const Orders: React.FC = () => {
                             <tr>
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hint</th>
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch</th>
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hint</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-100">
@@ -396,15 +395,17 @@ const Orders: React.FC = () => {
                                   <td className="px-4 py-3">
                                     <span className="text-pink-700 underline cursor-pointer hover:text-pink-900 mr-1" onClick={e => { e.stopPropagation(); navigate(`/customers/${order.customerId}`); }}>{customer?.name}</span>
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">{order.hint || '-'}</td>
                                   <td className="px-4 py-3">{orderBatch ? orderBatch.batch_name : '-'}</td>
                                   <td className="px-4 py-3">{new Date(order.deliveryDate).toLocaleDateString()}</td>
                                   <td className="px-4 py-3">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                      order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
-                                      {order.isDelivered ? 'Completed' : order.currentStatus || 'Pending'}
+                                    <span className="text-sm text-gray-700">
+                                      {order.hint || '-'}
                                     </span>
+                                    {order.hint && (
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        (Hint available)
+                                      </div>
+                                    )}
                                   </td>
                                 </tr>
                               );

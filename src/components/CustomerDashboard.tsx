@@ -42,12 +42,19 @@ const CustomerDashboard: React.FC = () => {
     const fetchBatches = async () => {
       if (!selectedCustomer) return;
       setLoadingBatches(true);
+      console.log('Fetching batches for customer:', selectedCustomer.id);
       const { data, error } = await supabase
         .from('batches')
         .select('batch_tag, batch_name')
         .eq('customer_id', selectedCustomer.id)
         .order('created_at', { ascending: true });
-      if (!error && data) setBatches(data);
+      
+      if (error) {
+        console.error('Error fetching batches:', error);
+      } else {
+        console.log('Fetched batches:', data);
+        setBatches(data || []);
+      }
       setLoadingBatches(false);
     };
     fetchBatches();
@@ -101,6 +108,27 @@ const CustomerDashboard: React.FC = () => {
   const handleViewDetails = (customer: Customer) => {
     setSelectedCustomer(customer);
     setShowDetails(true);
+    // Refresh batches when opening customer details
+    setTimeout(() => {
+      const fetchBatches = async () => {
+        setLoadingBatches(true);
+        console.log('Refreshing batches for customer:', customer.id);
+        const { data, error } = await supabase
+          .from('batches')
+          .select('batch_tag, batch_name')
+          .eq('customer_id', customer.id)
+          .order('created_at', { ascending: true });
+        
+        if (error) {
+          console.error('Error fetching batches:', error);
+        } else {
+          console.log('Refreshed batches:', data);
+          setBatches(data || []);
+        }
+        setLoadingBatches(false);
+      };
+      fetchBatches();
+    }, 100); // Small delay to ensure state is set
   };
   const closeDetails = () => {
     setShowDetails(false);
@@ -377,7 +405,7 @@ const CustomerDashboard: React.FC = () => {
                                   )
                                 </div>
                                 <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
-                                <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
+                                <div className="text-xs text-gray-600">Hint: {order.hint || 'No hint'}</div>
                                 {order.batch_tag && <div className="text-xs text-purple-600">Batch: {order.batch_tag}</div>}
                               </div>
                               <div className="mt-2 md:mt-0">
@@ -397,7 +425,77 @@ const CustomerDashboard: React.FC = () => {
                 const batchTags = batches.map(b => b.batch_tag);
                 return (
                   <div className="space-y-6">
-                    {batchTags.length === 0 && <div className="text-gray-400 text-sm">No batches created yet.</div>}
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold text-purple-700">Batches</h3>
+                      <div className="flex gap-2">
+                        <button 
+                          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                          onClick={() => {
+                            setLoadingBatches(true);
+                            supabase
+                              .from('batches')
+                              .select('batch_tag, batch_name')
+                              .eq('customer_id', selectedCustomer.id)
+                              .order('created_at', { ascending: true })
+                              .then(({ data, error }) => {
+                                if (error) {
+                                  console.error('Error refreshing batches:', error);
+                                } else {
+                                  console.log('Refreshed batches:', data);
+                                  setBatches(data || []);
+                                }
+                                setLoadingBatches(false);
+                              });
+                          }}
+                          disabled={loadingBatches}
+                        >
+                          {loadingBatches ? 'Refreshing...' : '🔄 Refresh'}
+                        </button>
+                        <button 
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                          onClick={() => {
+                            const newTag = `batch_${Date.now()}`;
+                            const newName = `Batch ${batches.length + 1}`;
+                            supabase.from('batches').insert({
+                              customer_id: selectedCustomer.id,
+                              batch_tag: newTag,
+                              batch_name: newName
+                            }).then(() => {
+                              setBatches(prev => [...prev, { batch_tag: newTag, batch_name: newName }]);
+                            });
+                          }}
+                        >
+                          + Create New Batch
+                        </button>
+                      </div>
+                    </div>
+                    {loadingBatches && (
+                      <div className="text-gray-500 text-sm mb-4 flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                        Loading batches...
+                      </div>
+                    )}
+                    {!loadingBatches && batchTags.length === 0 && (
+                      <div className="text-gray-400 text-sm mb-4">
+                        No batches created yet. 
+                        <button 
+                          className="ml-2 text-blue-600 underline"
+                          onClick={() => {
+                            const newTag = `batch_${Date.now()}`;
+                            const newName = `Batch ${batches.length + 1}`;
+                            supabase.from('batches').insert({
+                              customer_id: selectedCustomer.id,
+                              batch_tag: newTag,
+                              batch_name: newName
+                            }).then(() => {
+                              setBatches(prev => [...prev, { batch_tag: newTag, batch_name: newName }]);
+                            });
+                          }}
+                        >
+                          Create First Batch
+                        </button>
+                      </div>
+                    )}
                     {batchTags.map((tag, idx) => {
                       const batchName = batches.find(b => b.batch_tag === tag)?.batch_name || `Batch ${idx + 1}`;
                       return (
@@ -462,7 +560,7 @@ const CustomerDashboard: React.FC = () => {
                                             )
                                           </div>
                                           <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
-                                          <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
+                                          <div className="text-xs text-gray-600">Hint: {order.hint || 'No hint'}</div>
                                         </div>
                                         <div className="mt-2 md:mt-0 flex flex-col md:flex-row md:items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{order.isDelivered ? 'Ready' : 'Pending'}</span>
@@ -534,7 +632,7 @@ const CustomerDashboard: React.FC = () => {
                                           )
                                         </div>
                                         <div className="text-xs text-gray-600">Delivery: {new Date(order.deliveryDate).toLocaleDateString()}</div>
-                                        <div className="text-xs text-gray-600">Status: {order.isDelivered ? 'Ready' : 'Pending'}</div>
+                                        <div className="text-xs text-gray-600">Hint: {order.hint || 'No hint'}</div>
                                       </div>
                                       <div className="mt-2 md:mt-0">
                                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${order.isDelivered ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{order.isDelivered ? 'Ready' : 'Pending'}</span>
