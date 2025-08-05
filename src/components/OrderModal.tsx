@@ -735,14 +735,16 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
-                    <div className="flex items-center border border-gray-300 rounded-lg focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
+                    {/* Desktop/Tablet: Custom controls */}
+                    <div className="hidden md:flex items-center border border-gray-300 rounded-lg focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
                       <button
                         type="button"
                         onClick={() => handleMaterialChange(0, 'numberOfItems', Math.max(1, materials[0].numberOfItems - 1))}
-                        className="px-3 py-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 border-r border-gray-300 rounded-l-lg transition-colors"
+                        className="px-4 py-4 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-r border-gray-300 rounded-l-lg transition-colors touch-manipulation"
                         disabled={materials[0].numberOfItems <= 1}
+                        style={{ minWidth: '44px', minHeight: '44px' }}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                         </svg>
                       </button>
@@ -752,19 +754,43 @@ const OrderModal: React.FC<OrderModalProps> = ({
                         max="35"
                         value={materials[0].numberOfItems}
                         onChange={e => handleMaterialChange(0, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
-                        className="flex-1 px-4 py-3 border-0 focus:ring-0 text-center"
+                        onKeyDown={(e) => {
+                          if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            handleMaterialChange(0, 'numberOfItems', Math.min(35, materials[0].numberOfItems + 1));
+                          } else if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            handleMaterialChange(0, 'numberOfItems', Math.max(1, materials[0].numberOfItems - 1));
+                          }
+                        }}
+                        className="flex-1 px-4 py-4 border-0 focus:ring-0 text-center text-lg font-medium"
+                        style={{ fontSize: '16px' }}
                         required
                       />
                       <button
                         type="button"
                         onClick={() => handleMaterialChange(0, 'numberOfItems', Math.min(35, materials[0].numberOfItems + 1))}
-                        className="px-3 py-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 border-l border-gray-300 rounded-r-lg transition-colors"
+                        className="px-4 py-4 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-l border-gray-300 rounded-r-lg transition-colors touch-manipulation"
                         disabled={materials[0].numberOfItems >= 35}
+                        style={{ minWidth: '44px', minHeight: '44px' }}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
                       </button>
+                    </div>
+                    {/* Mobile: Dropdown for better touch experience */}
+                    <div className="md:hidden">
+                      <select
+                        value={materials[0].numberOfItems}
+                        onChange={e => handleMaterialChange(0, 'numberOfItems', parseInt(e.target.value))}
+                        className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 text-center text-lg font-medium"
+                        required
+                      >
+                        {Array.from({ length: 35 }, (_, i) => i + 1).map(num => (
+                          <option key={num} value={num}>{num}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
