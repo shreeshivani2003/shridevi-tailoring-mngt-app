@@ -60,6 +60,30 @@ const CustomerDashboard: React.FC = () => {
     fetchBatches();
   }, [selectedCustomer]);
 
+  // Refresh batches periodically when customer details are open
+  useEffect(() => {
+    if (!selectedCustomer || !showDetails) return;
+    
+    // Initial refresh
+    refreshBatches();
+    
+    const interval = setInterval(async () => {
+      console.log('Periodic batch refresh for customer:', selectedCustomer.id);
+      const { data, error } = await supabase
+        .from('batches')
+        .select('batch_tag, batch_name')
+        .eq('customer_id', selectedCustomer.id)
+        .order('created_at', { ascending: true });
+      
+      if (!error && data) {
+        console.log('Periodic refresh - new batches:', data);
+        setBatches(data);
+      }
+    }, 3000); // Refresh every 3 seconds when details are open
+    
+    return () => clearInterval(interval);
+  }, [selectedCustomer, showDetails]);
+
   // --- SUMMARY CARDS ---
   const totalCustomers = customers.length;
   const newCustomers = customers.filter(c => {
@@ -110,29 +134,32 @@ const CustomerDashboard: React.FC = () => {
     setShowDetails(true);
     // Refresh batches when opening customer details
     setTimeout(() => {
-      const fetchBatches = async () => {
-        setLoadingBatches(true);
-        console.log('Refreshing batches for customer:', customer.id);
-        const { data, error } = await supabase
-          .from('batches')
-          .select('batch_tag, batch_name')
-          .eq('customer_id', customer.id)
-          .order('created_at', { ascending: true });
-        
-        if (error) {
-          console.error('Error fetching batches:', error);
-        } else {
-          console.log('Refreshed batches:', data);
-          setBatches(data || []);
-        }
-        setLoadingBatches(false);
-      };
-      fetchBatches();
-    }, 100); // Small delay to ensure state is set
+      refreshBatches();
+    }, 200); // Small delay to ensure state is set
   };
   const closeDetails = () => {
     setShowDetails(false);
     setSelectedCustomer(null);
+  };
+
+  // Manual batch refresh function
+  const refreshBatches = async () => {
+    if (!selectedCustomer) return;
+    setLoadingBatches(true);
+    console.log('Manual batch refresh for customer:', selectedCustomer.id);
+    const { data, error } = await supabase
+      .from('batches')
+      .select('batch_tag, batch_name')
+      .eq('customer_id', selectedCustomer.id)
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      console.error('Error refreshing batches:', error);
+    } else {
+      console.log('Manually refreshed batches:', data);
+      setBatches(data || []);
+    }
+    setLoadingBatches(false);
   };
 
   const handleOrderClick = (order: Order) => {
@@ -159,6 +186,13 @@ const CustomerDashboard: React.FC = () => {
   // Group orders by batch_tag for the selected customer (using UI state)
   const getBatches = (orders: Order[]) => {
     const batchesMap: Record<string, Order[]> = {};
+    
+    // First, show all batches from database, even if empty
+    batches.forEach(batch => {
+      batchesMap[batch.batch_tag] = [];
+    });
+    
+    // Then assign orders to their batches
     orders.forEach(order => {
       const tag = batchAssignments[order.id] || order.batch_tag || '';
       if (tag) {
@@ -166,8 +200,17 @@ const CustomerDashboard: React.FC = () => {
         batchesMap[tag].push(order);
       }
     });
+    
     // Orders without batch_tag
     const unbatched = orders.filter(o => !(batchAssignments[o.id] || o.batch_tag));
+    
+    console.log('getBatches debug:', {
+      batchesFromDB: batches,
+      ordersCount: orders.length,
+      batchesMap,
+      unbatchedCount: unbatched.length
+    });
+    
     return { batches: batchesMap, unbatched };
   };
 
@@ -370,7 +413,11 @@ const CustomerDashboard: React.FC = () => {
               </button>
               <button
                 className={`px-4 py-2 rounded-lg font-medium ${showBatches ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-700'}`}
-                onClick={() => setShowBatches(true)}
+                onClick={() => {
+                  setShowBatches(true);
+                  // Refresh batches when switching to batch view
+                  setTimeout(() => refreshBatches(), 100);
+                }}
               >
                 Grouped by Batches
               </button>
@@ -423,6 +470,13 @@ const CustomerDashboard: React.FC = () => {
               (() => {
                 const { batches: batchMap, unbatched } = getBatches(selectedCustomer.orders);
                 const batchTags = batches.map(b => b.batch_tag);
+                console.log('Batch view debug:', {
+                  batchesFromDB: batches,
+                  batchTags,
+                  batchMap,
+                  unbatchedCount: unbatched.length,
+                  selectedCustomerOrders: selectedCustomer.orders.length
+                });
                 return (
                   <div className="space-y-6">
                     <div className="flex justify-between items-center mb-4">
@@ -430,23 +484,7 @@ const CustomerDashboard: React.FC = () => {
                       <div className="flex gap-2">
                         <button 
                           className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-                          onClick={() => {
-                            setLoadingBatches(true);
-                            supabase
-                              .from('batches')
-                              .select('batch_tag, batch_name')
-                              .eq('customer_id', selectedCustomer.id)
-                              .order('created_at', { ascending: true })
-                              .then(({ data, error }) => {
-                                if (error) {
-                                  console.error('Error refreshing batches:', error);
-                                } else {
-                                  console.log('Refreshed batches:', data);
-                                  setBatches(data || []);
-                                }
-                                setLoadingBatches(false);
-                              });
-                          }}
+                          onClick={refreshBatches}
                           disabled={loadingBatches}
                         >
                           {loadingBatches ? 'Refreshing...' : '🔄 Refresh'}
