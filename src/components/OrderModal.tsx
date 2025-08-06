@@ -684,7 +684,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
             {/* First material entry (not scrollable) */}
             {materials.length > 0 && (
               <div className="rounded-xl border p-6 relative bg-white shadow-sm mt-4">
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex justify-between items-center mb-2">
                   <span className="font-semibold text-pink-700 text-lg">Material 1</span>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => handleEditMaterial(0)} className="text-xs text-blue-600 underline">Edit</button>
@@ -693,7 +693,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                     )}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Material Type *</label>
                     <select
@@ -712,19 +712,14 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
-                    <div className="text-xs text-blue-600 mb-1">
-                      ℹ️ Each item will be created as a separate order
-                    </div>
-                    {/* Desktop/Tablet: Custom controls */}
-                    <div className="hidden md:flex items-center border border-gray-300 rounded-lg focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
+                    <div className="flex items-center border border-gray-300 rounded-lg focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
                       <button
                         type="button"
                         onClick={() => handleMaterialChange(0, 'numberOfItems', Math.max(1, materials[0].numberOfItems - 1))}
-                        className="px-4 py-4 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-r border-gray-300 rounded-l-lg transition-colors touch-manipulation"
+                        className="px-3 py-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-r border-gray-300 rounded-l-lg transition-colors touch-manipulation"
                         disabled={materials[0].numberOfItems <= 1}
-                        style={{ minWidth: '44px', minHeight: '44px' }}
                       >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                         </svg>
                       </button>
@@ -734,48 +729,24 @@ const OrderModal: React.FC<OrderModalProps> = ({
                         max="35"
                         value={materials[0].numberOfItems}
                         onChange={e => handleMaterialChange(0, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
-                        onKeyDown={(e) => {
-                          if (e.key === 'ArrowUp') {
-                            e.preventDefault();
-                            handleMaterialChange(0, 'numberOfItems', Math.min(35, materials[0].numberOfItems + 1));
-                          } else if (e.key === 'ArrowDown') {
-                            e.preventDefault();
-                            handleMaterialChange(0, 'numberOfItems', Math.max(1, materials[0].numberOfItems - 1));
-                          }
-                        }}
-                        className="flex-1 px-4 py-4 border-0 focus:ring-0 text-center text-lg font-medium"
-                        style={{ fontSize: '16px' }}
+                        className="flex-1 px-4 py-3 border-0 focus:ring-0 text-center font-medium"
                         required
                       />
                       <button
                         type="button"
                         onClick={() => handleMaterialChange(0, 'numberOfItems', Math.min(35, materials[0].numberOfItems + 1))}
-                        className="px-4 py-4 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-l border-gray-300 rounded-r-lg transition-colors touch-manipulation"
+                        className="px-3 py-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-l border-gray-300 rounded-r-lg transition-colors touch-manipulation"
                         disabled={materials[0].numberOfItems >= 35}
-                        style={{ minWidth: '44px', minHeight: '44px' }}
                       >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
                       </button>
                     </div>
-                    {/* Mobile: Dropdown for better touch experience */}
-                    <div className="md:hidden">
-                      <select
-                        value={materials[0].numberOfItems}
-                        onChange={e => handleMaterialChange(0, 'numberOfItems', parseInt(e.target.value))}
-                        className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 text-center text-lg font-medium"
-                        required
-                      >
-                        {Array.from({ length: 35 }, (_, i) => i + 1).map(num => (
-                          <option key={num} value={num}>{num}</option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
                 </div>
-                {/* Size Book Number and Blouse Material Category */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end mt-4">
+                {/* Size Book Number and Service Types */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start mt-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Size Book No.</label>
                     <div className="relative">
@@ -784,44 +755,43 @@ const OrderModal: React.FC<OrderModalProps> = ({
                         value={formData.sizeBookNo}
                         onChange={e => setFormData({ ...formData, sizeBookNo: e.target.value })}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                        placeholder="Page number where size is noted"
+                        placeholder="Size Book No."
                       />
-
                     </div>
                   </div>
-                  {materials[0].materialType === 'blouse' && (
+                  
+                  {/* Service Types Multi-Select */}
+                  {materialServiceTypes[materials[0].materialType as MaterialType]?.length > 0 && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
-                      <select
-                        value={formData.blouseMaterialCategory}
-                        onChange={e => setFormData({ ...formData, blouseMaterialCategory: e.target.value as BlouseMaterialCategory })}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                      >
-                        <option value="normal">Normal</option>
-                        <option value="piping">Piping</option>
-                      </select>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Service Type *</label>
+                      <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                        {(materialServiceTypes[materials[0].materialType as MaterialType] || []).map((option: string) => (
+                          <div key={option} className="flex items-center gap-2 p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              id={`service-type-0-${option}`}
+                              checked={((materials[0].serviceTypes as string[]) || []).includes(option)}
+                              onChange={e => {
+                                const currentTypes = (materials[0].serviceTypes as string[]) || [];
+                                const newTypes = e.target.checked 
+                                  ? [...currentTypes, option] 
+                                  : currentTypes.filter(type => type !== option);
+                                handleMaterialChange(0, 'serviceTypes', newTypes);
+                              }}
+                              className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 cursor-pointer"
+                            />
+                            <label htmlFor={`service-type-0-${option}`} className="text-sm font-medium text-gray-700 cursor-pointer flex-1">
+                              {option}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                  {materials[0].materialType === 'saree' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
-                      <select
-                        value={materials[0].sareeServiceType}
-                        onChange={e => handleMaterialChange(0, 'sareeServiceType', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                        required
-                      >
-                        <option value="Falls Stitching">Falls Stitching</option>
-                        <option value="Falls Hemming">Falls Hemming</option>
-                        <option value="Saree Knot">Saree Knot</option>
-                      </select>
-                    </div>
-                  )}
-
-
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
-                  <div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mt-2">
+                  <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Date *</label>
                     <div className="relative">
                       <input
@@ -850,7 +820,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                       )}
                     </div>
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
                     <div className="flex items-center border border-gray-300 rounded-lg focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
                       <span className="px-3 py-3 text-gray-400 text-lg select-none">₹</span>
@@ -858,14 +828,14 @@ const OrderModal: React.FC<OrderModalProps> = ({
                         type="number"
                         value={materials[0].amount}
                         onChange={e => handleMaterialChange(0, 'amount', e.target.value)}
-                        className="flex-1 px-4 py-3 border-0 focus:ring-0"
+                        className="flex-1 px-2 py-3 border-0 focus:ring-0"
                         min="0"
                         placeholder="0"
                       />
                       <button
                         type="button"
                         onClick={() => handleMaterialChange(0, 'amount', (parseFloat(materials[0].amount) || 0) + 100)}
-                        className="px-3 py-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 border-l border-gray-300 rounded-r-lg transition-colors"
+                        className="px-2 py-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 border-l border-gray-300 rounded-r-lg transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -960,20 +930,14 @@ const OrderModal: React.FC<OrderModalProps> = ({
                             <th className="px-4 py-2 font-semibold">Delivery Date</th>
                             <th className="px-4 py-2 font-semibold">Hint</th>
                             <th className="px-4 py-2 font-semibold">Amount</th>
-                            {materials[0].materialType === 'blouse' && (
-                              <>
-                                <th className="px-4 py-2 font-semibold">Lining Cloth</th>
-                                <th className="px-4 py-2 font-semibold">Service Type</th>
-                              </>
-                            )}
-                            {materials[0].materialType === 'chudi' && (
+                            {(materials[0].materialType === 'blouse' || materials[0].materialType === 'chudi') && (
                               <th className="px-4 py-2 font-semibold">Lining Cloth</th>
                             )}
                             {materials[0].materialType === 'saree' && (
-                              <>
-                                <th className="px-4 py-2 font-semibold">Falls Cloth</th>
-                                <th className="px-4 py-2 font-semibold">Saree Service Type</th>
-                              </>
+                              <th className="px-4 py-2 font-semibold">Falls Cloth</th>
+                            )}
+                            {materialServiceTypes[materials[0].materialType as MaterialType]?.length > 0 && (
+                              <th className="px-4 py-2 font-semibold">Service Types</th>
                             )}
                           </tr>
                         </thead>
@@ -1022,28 +986,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                   placeholder="₹"
                                 />
                               </td>
-                              {materials[0].materialType === 'blouse' && (
-                                <>
-                                  <td className="px-4 py-2 text-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={customItems[0]?.[idx]?.liningClothGiven || false}
-                                      onChange={e => handleCustomItemChange(0, idx, 'liningClothGiven', e.target.checked)}
-                                    />
-                                  </td>
-                                  <td className="px-4 py-2">
-                                    <select
-                                      value={customItems[0]?.[idx]?.serviceType || 'normal'}
-                                      onChange={e => handleCustomItemChange(0, idx, 'serviceType', e.target.value)}
-                                      className="border rounded px-2 py-1 w-full"
-                                    >
-                                      <option value="normal">Normal</option>
-                                      <option value="piping">Piping</option>
-                                    </select>
-                                  </td>
-                                </>
-                              )}
-                              {materials[0].materialType === 'chudi' && (
+                              {(materials[0].materialType === 'blouse' || materials[0].materialType === 'chudi') && (
                                 <td className="px-4 py-2 text-center">
                                   <input
                                     type="checkbox"
@@ -1053,26 +996,36 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                 </td>
                               )}
                               {materials[0].materialType === 'saree' && (
-                                <>
-                                  <td className="px-4 py-2 text-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={customItems[0]?.[idx]?.fallsClothGiven || false}
-                                      onChange={e => handleCustomItemChange(0, idx, 'fallsClothGiven', e.target.checked)}
-                                    />
-                                  </td>
-                                  <td className="px-4 py-2">
-                                    <select
-                                      value={customItems[0]?.[idx]?.sareeServiceType || 'Falls Stitching'}
-                                      onChange={e => handleCustomItemChange(0, idx, 'sareeServiceType', e.target.value)}
-                                      className="border rounded px-2 py-1 w-full"
-                                    >
-                                      <option value="Falls Stitching">Falls Stitching</option>
-                                      <option value="Falls Hemming">Falls Hemming</option>
-                                      <option value="Saree Knot">Saree Knot</option>
-                                    </select>
-                                  </td>
-                                </>
+                                <td className="px-4 py-2 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={customItems[0]?.[idx]?.fallsClothGiven || false}
+                                    onChange={e => handleCustomItemChange(0, idx, 'fallsClothGiven', e.target.checked)}
+                                  />
+                                </td>
+                              )}
+                              {materialServiceTypes[materials[0].materialType as MaterialType]?.length > 0 && (
+                                <td className="px-4 py-2">
+                                  <div className="space-y-1">
+                                    {(materialServiceTypes[materials[0].materialType as MaterialType] || []).map((option: string) => (
+                                      <label key={option} className="flex items-center gap-2 text-xs">
+                                        <input
+                                          type="checkbox"
+                                          checked={((customItems[0]?.[idx]?.serviceTypes as string[]) || []).includes(option)}
+                                          onChange={e => {
+                                            const currentTypes = (customItems[0]?.[idx]?.serviceTypes as string[]) || [];
+                                            const newTypes = e.target.checked
+                                              ? [...currentTypes, option]
+                                              : currentTypes.filter(type => type !== option);
+                                            handleCustomItemChange(0, idx, 'serviceTypes', newTypes);
+                                          }}
+                                          className="w-3 h-3 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                                        />
+                                        <span className="text-xs">{option}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </td>
                               )}
                             </tr>
                           ))}
@@ -1091,13 +1044,13 @@ const OrderModal: React.FC<OrderModalProps> = ({
               <div className="space-y-8">
                 {materials.slice(1).map((mat, idx) => (
                   <div key={idx + 1} className="rounded-xl border p-6 relative bg-white shadow-sm">
-                    <div className="flex justify-between items-center mb-4">
+                    <div className="flex justify-between items-center mb-2">
                       <span className="font-semibold text-pink-700 text-lg">Material {idx + 2}</span>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => handleRemoveMaterial(idx + 1)} className="text-xs text-red-500 underline">Remove</button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Material Type *</label>
                         <select
@@ -1114,21 +1067,16 @@ const OrderModal: React.FC<OrderModalProps> = ({
                           <option value="others">Others</option>
                         </select>
                       </div>
-                                          <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
-                      <div className="text-xs text-blue-600 mb-1">
-                        ℹ️ Each item will be created as a separate order
-                      </div>
-                      {/* Desktop/Tablet: Custom controls */}
-                        <div className="hidden md:flex items-center border border-gray-300 rounded-lg focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
+                        <div className="flex items-center border border-gray-300 rounded-lg focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
                           <button
                             type="button"
                             onClick={() => handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, mat.numberOfItems - 1))}
-                            className="px-4 py-4 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-r border-gray-300 rounded-l-lg transition-colors touch-manipulation"
+                            className="px-3 py-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-r border-gray-300 rounded-l-lg transition-colors touch-manipulation"
                             disabled={mat.numberOfItems <= 1}
-                            style={{ minWidth: '44px', minHeight: '44px' }}
                           >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                             </svg>
                           </button>
@@ -1138,48 +1086,24 @@ const OrderModal: React.FC<OrderModalProps> = ({
                             max="35"
                             value={mat.numberOfItems}
                             onChange={e => handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, Math.min(35, parseInt(e.target.value) || 1)))}
-                            onKeyDown={(e) => {
-                              if (e.key === 'ArrowUp') {
-                                e.preventDefault();
-                                handleMaterialChange(idx + 1, 'numberOfItems', Math.min(35, mat.numberOfItems + 1));
-                              } else if (e.key === 'ArrowDown') {
-                                e.preventDefault();
-                                handleMaterialChange(idx + 1, 'numberOfItems', Math.max(1, mat.numberOfItems - 1));
-                              }
-                            }}
-                            className="flex-1 px-4 py-4 border-0 focus:ring-0 text-center text-lg font-medium"
-                            style={{ fontSize: '16px' }}
+                            className="flex-1 px-4 py-3 border-0 focus:ring-0 text-center font-medium"
                             required
                           />
                           <button
                             type="button"
                             onClick={() => handleMaterialChange(idx + 1, 'numberOfItems', Math.min(35, mat.numberOfItems + 1))}
-                            className="px-4 py-4 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-l border-gray-300 rounded-r-lg transition-colors touch-manipulation"
+                            className="px-3 py-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 active:bg-gray-200 border-l border-gray-300 rounded-r-lg transition-colors touch-manipulation"
                             disabled={mat.numberOfItems >= 35}
-                            style={{ minWidth: '44px', minHeight: '44px' }}
                           >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                             </svg>
                           </button>
                         </div>
-                        {/* Mobile: Dropdown for better touch experience */}
-                        <div className="md:hidden">
-                          <select
-                            value={mat.numberOfItems}
-                            onChange={e => handleMaterialChange(idx + 1, 'numberOfItems', parseInt(e.target.value))}
-                            className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0 text-center text-lg font-medium"
-                            required
-                          >
-                            {Array.from({ length: 35 }, (_, i) => i + 1).map(num => (
-                              <option key={num} value={num}>{num}</option>
-                            ))}
-                          </select>
-                        </div>
                       </div>
                     </div>
-                    {/* Size Book Number and Blouse Material Category for additional materials */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end mt-4">
+                    {/* Size Book Number and Service Types for additional materials */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start mt-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Size Book No.</label>
                         <div className="relative">
@@ -1188,56 +1112,41 @@ const OrderModal: React.FC<OrderModalProps> = ({
                             value={formData.sizeBookNo}
                             onChange={e => setFormData({ ...formData, sizeBookNo: e.target.value })}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                            placeholder="Page number where size is noted"
+                            placeholder="Size Book No."
                           />
-
                         </div>
                       </div>
-                      {mat.materialType === 'blouse' && (
+                      
+                      {/* Service Types Multi-Select */}
+                      {materialServiceTypes[mat.materialType as MaterialType]?.length > 0 && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
-                          <select
-                            value={formData.blouseMaterialCategory}
-                            onChange={e => setFormData({ ...formData, blouseMaterialCategory: e.target.value as BlouseMaterialCategory })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                          >
-                            <option value="normal">Normal</option>
-                            <option value="piping">Piping</option>
-                          </select>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Service Type *</label>
+                          <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                            {(materialServiceTypes[mat.materialType as MaterialType] || []).map((option: string) => (
+                              <div key={option} className="flex items-center gap-2 p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  id={`service-type-${idx + 1}-${option}`}
+                                  checked={((mat.serviceTypes as string[]) || []).includes(option)}
+                                  onChange={e => {
+                                    const currentTypes = (mat.serviceTypes as string[]) || [];
+                                    const newTypes = e.target.checked 
+                                      ? [...currentTypes, option] 
+                                      : currentTypes.filter(type => type !== option);
+                                    handleMaterialChange(idx + 1, 'serviceTypes', newTypes);
+                                  }}
+                                  className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 cursor-pointer"
+                                />
+                                <label htmlFor={`service-type-${idx + 1}-${option}`} className="text-sm font-medium text-gray-700 cursor-pointer flex-1">
+                                  {option}
+                                </label>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
-
-
-
                     </div>
-                    {/* Service Type Multi-Select */}
-                    {materialServiceTypes[mat.materialType as MaterialType]?.length > 0 && (
-                      <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Service Type *</label>
-                        <div className="space-y-2">
-                          {(materialServiceTypes[mat.materialType as MaterialType] || []).map((option: string) => (
-                            <label key={option} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={((mat.serviceTypes as string[]) || []).includes(option)}
-                                onChange={e => {
-                                  const currentTypes = (mat.serviceTypes as string[]) || [];
-                                  const newTypes = e.target.checked
-                                    ? [...currentTypes, option]
-                                    : currentTypes.filter(type => type !== option);
-                                  handleMaterialChange(idx, 'serviceTypes', newTypes);
-                                }}
-                                className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
-                              />
-                              <span className="text-sm font-medium text-gray-700">{option}</span>
-                            </label>
-                          ))}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-2">
-                          Selected: {(mat.serviceTypes || []).length > 0 ? (mat.serviceTypes || []).join(', ') : 'None'}
-                        </div>
-                      </div>
-                    )}
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Date *</label>
@@ -1346,20 +1255,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                             Falls Cloth Given?
                           </label>
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
-                          <select
-                            value={mat.sareeServiceType}
-                            onChange={e => handleMaterialChange(idx + 1, 'sareeServiceType', e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                            required
-                            disabled={customizeEachItem[idx + 1]}
-                          >
-                            <option value="Falls Stitching">Falls Stitching</option>
-                            <option value="Falls Hemming">Falls Hemming</option>
-                            <option value="Saree Knot">Saree Knot</option>
-                          </select>
-                        </div>
+
                       </div>
                     )}
                     {/* Customization toggle and table for material 2+ */}
@@ -1396,10 +1292,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                   <th className="px-4 py-2 font-semibold">Lining Cloth</th>
                                 )}
                                 {mat.materialType === 'saree' && (
-                                  <>
-                                    <th className="px-4 py-2 font-semibold">Falls Cloth</th>
-                                    <th className="px-4 py-2 font-semibold">Saree Service Type</th>
-                                  </>
+                                  <th className="px-4 py-2 font-semibold">Falls Cloth</th>
                                 )}
                               </tr>
                             </thead>
