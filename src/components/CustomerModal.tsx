@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
+import { useNavigate } from 'react-router-dom';
 import { X, Phone, MessageCircle, MapPin, FileText, Plus, Trash2 } from 'lucide-react';
 import { Customer } from '../types';
 import OrderModal from './OrderModal';
@@ -20,6 +21,7 @@ interface PhoneNumber {
 
 const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer, mode }) => {
   const { addCustomer, updateCustomer, getCustomerOrderCount, orders } = useData();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -127,6 +129,18 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
         notification.show('Adding customer...');
         await addCustomer(submitData);
         notification.show('Customer added successfully!');
+        
+        // Show acknowledgment and redirect to add order
+        setTimeout(() => {
+          notification.show(`Customer "${submitData.name}" created successfully! Redirecting to add order...`);
+          // Close the modal first
+          onClose();
+          // Navigate to add order page
+          setTimeout(() => {
+            navigate('/orders');
+          }, 500);
+        }, 1000);
+        return; // Don't close modal immediately
       } else if (mode === 'edit' && customer) {
         notification.show('Updating customer...');
         await updateCustomer(customer.id, submitData);

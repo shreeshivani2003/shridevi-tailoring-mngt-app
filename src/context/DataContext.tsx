@@ -14,7 +14,7 @@ interface DataContextType {
   customers: Customer[];
   orders: Order[];
   batches: Batch[]; // <-- add this
-  addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => Promise<void>;
+  addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => Promise<Customer>;
   updateCustomer: (id: string, customer: Partial<Customer>) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
   addOrder: (order: Omit<Order, 'id' | 'orderId' | 'createdAt' | 'currentStatus' | 'statusHistory' | 'isDelivered'>) => Promise<void>;
@@ -173,7 +173,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const addCustomer = async (customerData: Omit<Customer, 'id' | 'createdAt' | 'orders'>) => {
+  const addCustomer = async (customerData: Omit<Customer, 'id' | 'createdAt' | 'orders'>): Promise<Customer> => {
     try {
       const newCustomer: Customer = {
         ...customerData,
@@ -222,6 +222,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       setCustomers(prev => [mappedCustomer, ...prev]);
+      return mappedCustomer;
     } catch (error) {
       console.error('Error adding customer:', error);
       throw error;
