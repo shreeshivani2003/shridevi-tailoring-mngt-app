@@ -1212,22 +1212,30 @@ const OrderModal: React.FC<OrderModalProps> = ({
                     </div>
                     {/* Service Type Multi-Select */}
                     {materialServiceTypes[mat.materialType as MaterialType]?.length > 0 && (
-                      <div className="mb-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
-                        <select
-                          multiple
-                          value={mat.serviceTypes || []}
-                          onChange={e => {
-                            const options = Array.from(e.target.selectedOptions).map((opt: HTMLOptionElement) => opt.value);
-                            handleMaterialChange(idx, 'serviceTypes', options);
-                          }}
-                          className="w-full px-2 py-2 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
-                        >
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Service Type *</label>
+                        <div className="space-y-2">
                           {(materialServiceTypes[mat.materialType as MaterialType] || []).map((option: string) => (
-                            <option key={option} value={option}>{option}</option>
+                            <label key={option} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={((mat.serviceTypes as string[]) || []).includes(option)}
+                                onChange={e => {
+                                  const currentTypes = (mat.serviceTypes as string[]) || [];
+                                  const newTypes = e.target.checked
+                                    ? [...currentTypes, option]
+                                    : currentTypes.filter(type => type !== option);
+                                  handleMaterialChange(idx, 'serviceTypes', newTypes);
+                                }}
+                                className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                              />
+                              <span className="text-sm font-medium text-gray-700">{option}</span>
+                            </label>
                           ))}
-                        </select>
-                        <div className="text-xs text-gray-500">You can select multiple service types</div>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-2">
+                          Selected: {(mat.serviceTypes || []).length > 0 ? (mat.serviceTypes || []).join(', ') : 'None'}
+                        </div>
                       </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
@@ -1437,14 +1445,25 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                         />
                                       </td>
                                       <td className="px-4 py-2">
-                                        <select
-                                          value={customItems[idx + 1]?.[i]?.serviceType || 'normal'}
-                                          onChange={e => handleCustomItemChange(idx + 1, i, 'serviceType', e.target.value)}
-                                          className="border rounded px-2 py-1 w-full"
-                                        >
-                                          <option value="normal">Normal</option>
-                                          <option value="piping">Piping</option>
-                                        </select>
+                                        <div className="space-y-1">
+                                          {(materialServiceTypes[mat.materialType as MaterialType] || []).map((option: string) => (
+                                            <label key={option} className="flex items-center gap-2 text-xs">
+                                              <input
+                                                type="checkbox"
+                                                checked={((customItems[idx + 1]?.[i]?.serviceTypes as string[]) || []).includes(option)}
+                                                onChange={e => {
+                                                  const currentTypes = (customItems[idx + 1]?.[i]?.serviceTypes as string[]) || [];
+                                                  const newTypes = e.target.checked
+                                                    ? [...currentTypes, option]
+                                                    : currentTypes.filter(type => type !== option);
+                                                  handleCustomItemChange(idx + 1, i, 'serviceTypes', newTypes);
+                                                }}
+                                                className="w-3 h-3 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                                              />
+                                              <span className="text-xs">{option}</span>
+                                            </label>
+                                          ))}
+                                        </div>
                                       </td>
                                     </>
                                   )}
@@ -1467,15 +1486,25 @@ const OrderModal: React.FC<OrderModalProps> = ({
                                         />
                                       </td>
                                       <td className="px-4 py-2">
-                                        <select
-                                          value={customItems[idx + 1]?.[i]?.sareeServiceType || 'Falls Stitching'}
-                                          onChange={e => handleCustomItemChange(idx + 1, i, 'sareeServiceType', e.target.value)}
-                                          className="border rounded px-2 py-1 w-full"
-                                        >
-                                          <option value="Falls Stitching">Falls Stitching</option>
-                                          <option value="Falls Hemming">Falls Hemming</option>
-                                          <option value="Saree Knot">Saree Knot</option>
-                                        </select>
+                                        <div className="space-y-1">
+                                          {(materialServiceTypes[mat.materialType as MaterialType] || []).map((option: string) => (
+                                            <label key={option} className="flex items-center gap-2 text-xs">
+                                              <input
+                                                type="checkbox"
+                                                checked={((customItems[idx + 1]?.[i]?.serviceTypes as string[]) || []).includes(option)}
+                                                onChange={e => {
+                                                  const currentTypes = (customItems[idx + 1]?.[i]?.serviceTypes as string[]) || [];
+                                                  const newTypes = e.target.checked
+                                                    ? [...currentTypes, option]
+                                                    : currentTypes.filter(type => type !== option);
+                                                  handleCustomItemChange(idx + 1, i, 'serviceTypes', newTypes);
+                                                }}
+                                                className="w-3 h-3 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                                              />
+                                              <span className="text-xs">{option}</span>
+                                            </label>
+                                          ))}
+                                        </div>
                                       </td>
                                     </>
                                   )}

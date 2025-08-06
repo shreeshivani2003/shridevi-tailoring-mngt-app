@@ -121,7 +121,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Load orders
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('id, order_id, customer_id, customer_name, material_type, order_type, given_date, delivery_date, current_status, status_history, is_delivered, created_at, hint, approximate_amount, batch_tag, size_book_no, blouse_material_category, lining_cloth_given, falls_cloth_given, saree_service_type, number_of_items')
+        .select('id, order_id, customer_id, customer_name, material_type, order_type, given_date, delivery_date, current_status, status_history, is_delivered, created_at, hint, approximate_amount, batch_tag, size_book_no, blouse_material_category, lining_cloth_given, falls_cloth_given, saree_service_type, number_of_items, service_types')
         .order('created_at', { ascending: false });
 
       if (ordersError) {
@@ -152,7 +152,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           liningClothGiven: order.lining_cloth_given,
           fallsClothGiven: order.falls_cloth_given,
           sareeServiceType: order.saree_service_type,
-          numberOfItems: order.number_of_items
+          numberOfItems: order.number_of_items,
+          serviceTypes: order.service_types || []
         }));
         setOrders(mappedOrders);
       }
@@ -328,7 +329,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           completed_at: new Date().toISOString(),
           notes: 'Order created'
         }],
-        is_delivered: false
+        is_delivered: false,
+        service_types: orderData.serviceTypes || []
       };
 
       console.log('Attempting to insert order:', newOrder);
@@ -371,7 +373,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         referenceImage: data.reference_image,
         notes: data.notes,
         approximateAmount: data.approximate_amount || 0,
-        hint: data.hint
+        hint: data.hint,
+        serviceTypes: data.service_types || []
       };
 
       setOrders(prev => [mappedOrder, ...prev]);
@@ -406,6 +409,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (orderData.fallsClothGiven !== undefined) updateData.falls_cloth_given = orderData.fallsClothGiven;
       if (orderData.sareeServiceType !== undefined) updateData.saree_service_type = orderData.sareeServiceType;
       if (orderData.numberOfItems !== undefined) updateData.number_of_items = orderData.numberOfItems;
+      if (orderData.serviceTypes !== undefined) updateData.service_types = orderData.serviceTypes;
       
       // Convert Date objects to ISO strings for Supabase
       if (orderData.deliveryDate) {
@@ -446,7 +450,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         referenceImage: data.reference_image,
         notes: data.notes,
         approximateAmount: data.approximate_amount || 0,
-        hint: data.hint
+        hint: data.hint,
+        serviceTypes: data.service_types || []
       };
 
       setOrders(prev => prev.map(order => 
@@ -830,6 +835,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         is_delivered: false,
         size_book_no: orderData.sizeBookNo,
         blouse_material_category: orderData.blouseMaterialCategory,
+        service_types: orderData.serviceTypes || [],
       };
       
       ordersToInsert.push(newOrder);
@@ -860,7 +866,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         liningClothGiven: newOrder.lining_cloth_given,
         fallsClothGiven: newOrder.falls_cloth_given,
         sareeServiceType: newOrder.saree_service_type,
-        numberOfItems: newOrder.number_of_items
+        numberOfItems: newOrder.number_of_items,
+        serviceTypes: newOrder.service_types || []
       };
       
       newOrders.push(mappedOrder);

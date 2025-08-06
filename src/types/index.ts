@@ -75,11 +75,11 @@ export const materialStages: Record<MaterialType, string[]> = {
 };
 
 export const materialServiceTypes: Record<MaterialType, string[]> = {
-  blouse: ['lining blouse', 'princess cut', 'simple design', 'boat neck'],
-  chudi: ['normal', 'design'],
+  blouse: ['princess cut', 'simple design', 'boat neck', 'lining blouse'],
+  chudi: ['design', 'normal'],
   works: ['normal', 'heavy', 'machine work'],
   lehenga: ['normal', 'heavy'],
-  saree: ['saree oram'],
+  saree: ['oram', 'knot', 'hemming', 'falls stitching'],
   others: [],
 };
 
