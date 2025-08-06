@@ -326,8 +326,20 @@ const Status: React.FC = () => {
       // Find the highest selected stage index
       const selectedIndices = selectedStages.map(stage => stages.indexOf(stage)).filter(idx => idx !== -1);
       const maxSelectedIdx = Math.max(...selectedIndices);
-      const nextIdx = Math.max(currentIdx + 1, maxSelectedIdx + 1);
-      const nextStatus = stages[nextIdx];
+      
+      // Check if Delivery is among the selected stages
+      const hasDeliverySelected = selectedStages.includes('Delivery');
+      
+      let nextIdx, nextStatus;
+      if (hasDeliverySelected) {
+        // If Delivery is selected, mark as delivered
+        nextIdx = stages.length - 1; // Last stage (Delivery)
+        nextStatus = 'Delivery';
+      } else {
+        // Normal flow - go to next stage after highest selected
+        nextIdx = Math.max(currentIdx + 1, maxSelectedIdx + 1);
+        nextStatus = stages[nextIdx];
+      }
 
       // Find customer and log
       const customer = customers.find(c => c.id === order.customerId);
@@ -340,20 +352,31 @@ const Status: React.FC = () => {
         }
         
         // Generate custom message for multi-stage update
-        const stageText = generateStageText(order, selectedStages);
-        const hintText = order.hint ? `%0AHint: ${order.hint}` : '';
-        const customMessage = `Hello ${order.customerName},%0AOrder ID: *${order.orderId}*%0A${stageText}%0ANext Status: *${nextStatus}*%0AMaterial: ${order.materialType}${hintText}`;
+        let customMessage;
+        if (hasDeliverySelected) {
+          // If Delivery is selected, send final delivery message
+          customMessage = `Hello ${order.customerName}!\n\nYour order ${order.orderId} (${order.materialType}) is ready for delivery.\nThank you for choosing Shri Devi Tailoring!\nFor picking, please come to the shop between 10am-6pm.`;
+        } else {
+          // Normal multi-stage update message
+          const stageText = generateStageText(order, selectedStages);
+          const hintText = order.hint ? `%0AHint: ${order.hint}` : '';
+          customMessage = `Hello ${order.customerName},%0AOrder ID: *${order.orderId}*%0A${stageText}%0ANext Status: *${nextStatus}*%0AMaterial: ${order.materialType}${hintText}`;
+        }
         
         if (customer && waNumber) {
-          const url = `https://wa.me/${waNumber}?text=${customMessage}`;
+          const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(customMessage)}`;
           console.log('Opening WhatsApp:', url);
           window.open(url, '_blank');
           notification.show(`WhatsApp message sent for multiple stages: ${selectedStages.join(', ')}`);
         }
         
         try {
-          const result = await updateOrderStatus(order.orderId, 'next');
-          if (result.isFinalStage) {
+          // If Delivery is selected, update directly to Delivery status
+          const result = hasDeliverySelected 
+            ? await updateOrderStatus(order.orderId, 'Delivery')
+            : await updateOrderStatus(order.orderId, 'next');
+            
+          if (result.isFinalStage || hasDeliverySelected) {
             const customer = customers.find(c => c.id === order.customerId);
             const waNumber = customer ? (customer.whatsappNumber || customer.phone) : '';
             if (customer && customer.whatsappEnabled && waNumber) {
