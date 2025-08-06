@@ -126,14 +126,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer
       if (mode === 'add') {
         notification.show('Adding customer...');
         await addCustomer(submitData);
-        notification.show('Customer added successfully');
         notification.show('Customer added successfully!');
-        // WhatsApp integration
-        if (submitData.whatsappEnabled && submitData.whatsappNumber) {
-          const msg = `Hello ${submitData.name},%0AWelcome to Shri Devi Tailoring!%0ACustomer ID: *${submitData.customerId}*%0AYou have *0* orders with us.`;
-          const url = `https://wa.me/${submitData.whatsappNumber}?text=${msg}`;
-          window.open(url, '_blank');
-        }
       } else if (mode === 'edit' && customer) {
         notification.show('Updating customer...');
         await updateCustomer(customer.id, submitData);

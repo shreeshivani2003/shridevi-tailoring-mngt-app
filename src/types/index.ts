@@ -52,6 +52,7 @@ export interface Order {
   fallsClothGiven?: boolean;
   sareeServiceType?: string;
   numberOfItems?: number;
+  serviceTypes?: string[];
 }
 
 export interface StatusUpdate {
@@ -71,6 +72,15 @@ export const materialStages: Record<MaterialType, string[]> = {
   saree: ['Initial Checking', 'In Process', 'Delivery'],
   others: ['Cutting', 'In Process', 'Delivery'],
   lehenga: ['Initial Checking', 'Cutting', 'Stitching', 'Hemming', 'Final Checking', 'Delivery'],
+};
+
+export const materialServiceTypes: Record<MaterialType, string[]> = {
+  blouse: ['lining blouse', 'princess cut', 'simple design', 'boat neck'],
+  chudi: ['normal', 'design'],
+  works: ['normal', 'heavy', 'machine work'],
+  lehenga: ['normal', 'heavy'],
+  saree: ['saree oram'],
+  others: [],
 };
 
 export const tamilSizeFields = [
@@ -105,5 +115,5 @@ export interface OrderCreationData {
   batchTag?: string;
   sizeBookNo?: string;
   blouseMaterialCategory?: BlouseMaterialCategory;
-
+  serviceTypes?: string[];
 }

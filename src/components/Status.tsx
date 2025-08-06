@@ -18,7 +18,7 @@ import { materialStages, MaterialType, OrderType } from '../types';
 import { useNavigate } from 'react-router-dom';
 
 const Status: React.FC = () => {
-  const { orders, updateOrderStatus, customers, getDeliveredOrders, getReadyForDeliveryOrders } = useData();
+  const { orders, updateOrderStatus, customers, getDeliveredOrders, getReadyForDeliveryOrders, loadData } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
   const notification = useNotification();
@@ -42,6 +42,7 @@ const Status: React.FC = () => {
 
   // Long press timer state
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [isLongPressing, setIsLongPressing] = useState<{[orderId: string]: {[stage: string]: boolean}}>({});
 
   // Helper: get all unique status stages
   const allStages = useMemo(() => {
@@ -122,6 +123,15 @@ const Status: React.FC = () => {
 
   // Long press handlers for multi-stage selection
   const handleStageMouseDown = (orderId: string, stage: string) => {
+    // Set visual feedback that long press is starting
+    setIsLongPressing(prev => ({
+      ...prev,
+      [orderId]: {
+        ...(prev[orderId] || {}),
+        [stage]: true
+      }
+    }));
+    
     const timer = setTimeout(() => {
       setMultiStageSelection(prev => {
         const currentSelection = prev[orderId] || [];
@@ -141,6 +151,23 @@ const Status: React.FC = () => {
           };
         }
       });
+      
+      // Clear the long pressing state after selection
+      setIsLongPressing(prev => {
+        const newState = { ...prev };
+        if (newState[orderId]) {
+          delete newState[orderId][stage];
+          if (Object.keys(newState[orderId]).length === 0) {
+            delete newState[orderId];
+          }
+        }
+        return newState;
+      });
+      
+      // Haptic feedback for successful long press (if supported)
+      if ('vibrate' in navigator) {
+        navigator.vibrate(50);
+      }
     }, 500); // 500ms for long press
     setLongPressTimer(timer);
   };
@@ -150,6 +177,87 @@ const Status: React.FC = () => {
       clearTimeout(longPressTimer);
       setLongPressTimer(null);
     }
+    
+    // Clear visual feedback
+    setIsLongPressing({});
+  };
+
+  // Touch event handlers for tablet support
+  const handleStageTouchStart = (orderId: string, stage: string, e: React.TouchEvent) => {
+    // Prevent default to avoid scrolling or other default touch behaviors
+    e.preventDefault();
+    
+    // Set visual feedback that long press is starting
+    setIsLongPressing(prev => ({
+      ...prev,
+      [orderId]: {
+        ...(prev[orderId] || {}),
+        [stage]: true
+      }
+    }));
+    
+    const timer = setTimeout(() => {
+      setMultiStageSelection(prev => {
+        const currentSelection = prev[orderId] || [];
+        const isAlreadySelected = currentSelection.includes(stage);
+        
+        if (isAlreadySelected) {
+          // Remove the stage if already selected
+          return {
+            ...prev,
+            [orderId]: currentSelection.filter(s => s !== stage)
+          };
+        } else {
+          // Add the stage if not selected
+          return {
+            ...prev,
+            [orderId]: [...currentSelection, stage]
+          };
+        }
+      });
+      
+      // Clear the long pressing state after selection
+      setIsLongPressing(prev => {
+        const newState = { ...prev };
+        if (newState[orderId]) {
+          delete newState[orderId][stage];
+          if (Object.keys(newState[orderId]).length === 0) {
+            delete newState[orderId];
+          }
+        }
+        return newState;
+      });
+      
+      // Haptic feedback for successful long press (if supported)
+      if ('vibrate' in navigator) {
+        navigator.vibrate(50);
+      }
+    }, 500); // 500ms for long press
+    setLongPressTimer(timer);
+  };
+
+  const handleStageTouchEnd = (e: React.TouchEvent) => {
+    // Prevent default to avoid any unwanted behaviors
+    e.preventDefault();
+    
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    
+    // Clear visual feedback
+    setIsLongPressing({});
+  };
+
+  const handleStageTouchMove = (e: React.TouchEvent) => {
+    // Cancel long press if user moves their finger
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    
+    // Clear visual feedback
+    setIsLongPressing({});
   };
 
   const handleStageClick = (orderId: string, stage: string) => {
@@ -163,6 +271,13 @@ const Status: React.FC = () => {
 
   const clearMultiStageSelection = (orderId: string) => {
     setMultiStageSelection(prev => {
+      const newState = { ...prev };
+      delete newState[orderId];
+      return newState;
+    });
+    
+    // Clear visual feedback for this order
+    setIsLongPressing(prev => {
       const newState = { ...prev };
       delete newState[orderId];
       return newState;
@@ -252,6 +367,8 @@ const Status: React.FC = () => {
           
           // Clear multi-stage selection after successful update
           clearMultiStageSelection(order.orderId);
+          // Refresh orders from backend
+          await loadData();
         } catch (error) {
           console.error('Error updating order status:', error);
           notification.show('Error updating order status');
@@ -503,6 +620,9 @@ const Status: React.FC = () => {
                           <span>Progress</span>
                           <span>{Math.round(((currentIdx + 1) / stages.length) * 100)}%</span>
                         </div>
+                        <div className="text-xs text-gray-500 mb-2">
+                          💡 Long press stages to select multiple for bulk update
+                        </div>
                         <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
                           <div className="bg-pink-500 h-2 rounded-full transition-all duration-500" style={{ width: `${((currentIdx + 1) / stages.length) * 100}%` }}></div>
                         </div>
@@ -510,13 +630,18 @@ const Status: React.FC = () => {
                           {stages.map((stage, idx) => {
                             const isSelected = multiStageSelection[order.orderId]?.includes(stage);
                             return (
-                              <div key={stage} className={`text-center py-0.5 rounded text-xs ${idx < currentIdx ? 'bg-green-100 text-green-700' : idx === currentIdx ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400'} ${isSelected ? 'ring-2 ring-pink-500 bg-pink-100' : ''}`}>
+                              <div key={stage} className={`text-center py-0.5 rounded text-xs ${idx < currentIdx ? 'bg-green-100 text-green-700' : idx === currentIdx ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400'} ${isSelected ? 'ring-2 ring-pink-500 bg-pink-100' : ''} ${isLongPressing[order.orderId]?.[stage] ? 'ring-2 ring-blue-500 bg-blue-100 animate-pulse' : ''}`}>
                                 <span
                                   onMouseDown={() => handleStageMouseDown(order.orderId, stage)}
                                   onMouseUp={handleStageMouseUp}
                                   onMouseLeave={handleStageMouseUp}
+                                  onTouchStart={(e) => handleStageTouchStart(order.orderId, stage, e)}
+                                  onTouchEnd={(e) => handleStageTouchEnd(e)}
+                                  onTouchMove={(e) => handleStageTouchMove(e)}
                                   onClick={() => handleStageClick(order.orderId, stage)}
-                                  className="cursor-pointer block w-full h-full"
+                                  className="cursor-pointer block w-full h-full select-none touch-manipulation"
+                                  style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+                                  title="Long press to select multiple stages"
                                 >
                                   {stage}
                                 </span>

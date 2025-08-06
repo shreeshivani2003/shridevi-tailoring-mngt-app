@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { X, Calendar, DollarSign, FileText, Camera, Search, User, AlertTriangle, Package, Scissors } from 'lucide-react';
-import { Customer, MaterialType, OrderType, BlouseMaterialCategory } from '../types';
+import { Customer, MaterialType, OrderType, BlouseMaterialCategory, materialServiceTypes } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from './Layout';
 import { supabase } from '../lib/supabase';
@@ -126,6 +126,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
     fallsClothGiven: false,
     sareeServiceType: 'Falls Stitching',
     editDeliveryDate: false,
+    serviceTypes: [],
   });
 
   const [materials, setMaterials] = useState([initialMaterial()]);
@@ -439,54 +440,37 @@ const OrderModal: React.FC<OrderModalProps> = ({
       const allOrders = [];
       
       for (const [matIdx, mat] of updatedMaterials.entries()) {
-        if (customizeEachItem[matIdx]) {
-          for (let i = 0; i < mat.numberOfItems; i++) {
-            const item = customItems[matIdx]?.[i] || {};
-            allOrders.push({
-              customerId: selectedCustomer.id,
-              customerName: selectedCustomer.name,
-              orderType: formData.orderType,
-              materialType: mat.materialType as MaterialType,
-              hint: item.note || mat.notes,
-              description: item.note || mat.notes,
-              referenceImage: '',
-              notes: item.note || mat.notes,
-              deliveryDate: new Date(item.deliveryDate || mat.deliveryDate),
-              givenDate,
-              approximateAmount: parseFloat(item.amount) || 0,
-              numberOfItems: 1,
-              editDeliveryDate: false,
-              liningClothGiven: (mat.materialType === 'blouse' || mat.materialType === 'chudi') ? item.liningClothGiven : false,
-              fallsClothGiven: mat.materialType === 'saree' ? item.fallsClothGiven : false,
-              sareeServiceType: mat.materialType === 'saree' ? item.sareeServiceType : '',
-              batchTag: batchTagToUse || undefined,
-              sizeBookNo: formData.sizeBookNo,
-              blouseMaterialCategory: mat.materialType === 'blouse' ? formData.blouseMaterialCategory : undefined,
-            });
+        // Always create individual orders for each item
+        for (let i = 0; i < mat.numberOfItems; i++) {
+          let item: any = {};
+          
+          // If customizing each item, use the custom item data
+          if (customizeEachItem[matIdx]) {
+            item = customItems[matIdx]?.[i] || {};
           }
-        } else {
-                      console.log('Material notes/hint:', mat.notes);
-            allOrders.push({
-              customerId: selectedCustomer.id,
-              customerName: selectedCustomer.name,
-              orderType: formData.orderType,
-              materialType: mat.materialType as MaterialType,
-              hint: mat.notes,
-              description: mat.notes,
-              referenceImage: '',
-              notes: mat.notes,
-              deliveryDate: new Date(mat.deliveryDate),
-              givenDate,
-              approximateAmount: parseFloat(mat.amount) || 0,
-              numberOfItems: mat.numberOfItems,
-              editDeliveryDate: false,
-              liningClothGiven: mat.liningClothGiven,
-              fallsClothGiven: mat.fallsClothGiven,
-              sareeServiceType: mat.sareeServiceType,
-              batchTag: batchTagToUse || undefined,
-              sizeBookNo: formData.sizeBookNo,
-              blouseMaterialCategory: mat.materialType === 'blouse' ? formData.blouseMaterialCategory : undefined,
-            });
+          
+          allOrders.push({
+            customerId: selectedCustomer.id,
+            customerName: selectedCustomer.name,
+            orderType: formData.orderType,
+            materialType: mat.materialType as MaterialType,
+            hint: item.note || mat.notes,
+            description: item.note || mat.notes,
+            referenceImage: '',
+            notes: item.note || mat.notes,
+            deliveryDate: new Date(item.deliveryDate || mat.deliveryDate),
+            givenDate,
+            approximateAmount: parseFloat(item.amount) || parseFloat(mat.amount) || 0,
+            numberOfItems: 1, // Always 1 since we're creating individual orders
+            editDeliveryDate: false,
+            liningClothGiven: (mat.materialType === 'blouse' || mat.materialType === 'chudi') ? (item.liningClothGiven !== undefined ? item.liningClothGiven : mat.liningClothGiven) : false,
+            fallsClothGiven: mat.materialType === 'saree' ? (item.fallsClothGiven !== undefined ? item.fallsClothGiven : mat.fallsClothGiven) : false,
+            sareeServiceType: mat.materialType === 'saree' ? (item.sareeServiceType || mat.sareeServiceType) : '',
+            batchTag: batchTagToUse || undefined,
+            sizeBookNo: formData.sizeBookNo,
+            blouseMaterialCategory: mat.materialType === 'blouse' ? (item.serviceType || formData.blouseMaterialCategory) : undefined,
+            serviceTypes: item.serviceTypes || mat.serviceTypes || [], // Include serviceTypes
+          });
         }
       }
       
@@ -498,22 +482,15 @@ const OrderModal: React.FC<OrderModalProps> = ({
       
       await addMultipleOrdersOptimized(allOrders);
       
+      // Refresh orders from backend
+      await loadData();
+      
       notification.show(`Successfully created ${allOrders.length} order(s)!`);
       console.log('Orders submitted successfully');
       onClose();
       
       if (mode === 'add') {
         notification.show('Order added successfully!');
-        // WhatsApp integration
-        if (selectedCustomer?.whatsappEnabled && selectedCustomer?.whatsappNumber) {
-          // Find the latest order for this customer
-          const latestOrder = orders.filter((o: any) => o.customerId === selectedCustomer.id)[0];
-          const totalOrders = orders.filter((o: any) => o.customerId === selectedCustomer.id).length + materials.length;
-          const orderId = latestOrder ? latestOrder.orderId : 'N/A';
-          const msg = `Hello ${selectedCustomer.name},%0AOrder placed successfully!%0AOrder ID: *${orderId}*%0ATotal Orders: *${totalOrders}*`;
-          const url = `https://wa.me/${selectedCustomer.whatsappNumber}?text=${msg}`;
-          window.open(url, '_blank');
-        }
       }
     } catch (error) {
       console.error('Error saving orders:', error);
@@ -735,6 +712,9 @@ const OrderModal: React.FC<OrderModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
+                    <div className="text-xs text-blue-600 mb-1">
+                      ℹ️ Each item will be created as a separate order
+                    </div>
                     {/* Desktop/Tablet: Custom controls */}
                     <div className="hidden md:flex items-center border border-gray-300 rounded-lg focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
                       <button
@@ -1134,9 +1114,12 @@ const OrderModal: React.FC<OrderModalProps> = ({
                           <option value="others">Others</option>
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
-                        {/* Desktop/Tablet: Custom controls */}
+                                          <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">No. of Items *</label>
+                      <div className="text-xs text-blue-600 mb-1">
+                        ℹ️ Each item will be created as a separate order
+                      </div>
+                      {/* Desktop/Tablet: Custom controls */}
                         <div className="hidden md:flex items-center border border-gray-300 rounded-lg focus-within:border-pink-500 focus-within:ring-1 focus-within:ring-pink-500">
                           <button
                             type="button"
@@ -1227,6 +1210,26 @@ const OrderModal: React.FC<OrderModalProps> = ({
 
 
                     </div>
+                    {/* Service Type Multi-Select */}
+                    {materialServiceTypes[mat.materialType as MaterialType]?.length > 0 && (
+                      <div className="mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                        <select
+                          multiple
+                          value={mat.serviceTypes || []}
+                          onChange={e => {
+                            const options = Array.from(e.target.selectedOptions).map((opt: HTMLOptionElement) => opt.value);
+                            handleMaterialChange(idx, 'serviceTypes', options);
+                          }}
+                          className="w-full px-2 py-2 border border-gray-300 rounded-lg focus:border-pink-500 focus:ring-0"
+                        >
+                          {(materialServiceTypes[mat.materialType as MaterialType] || []).map((option: string) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                        <div className="text-xs text-gray-500">You can select multiple service types</div>
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mt-2">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Date *</label>

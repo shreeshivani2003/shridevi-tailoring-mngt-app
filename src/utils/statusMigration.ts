@@ -61,7 +61,12 @@ export const migrateOrderStatuses = async () => {
         'Order Received': 'Initial Checking',
         'In Progress': 'In Process',
         'Final Check': 'Final Checking',
-        'Final Inspection': 'Final Checking'
+        'Final Inspection': 'Final Checking',
+        'Received': 'Initial Checking',
+        'Processing': 'In Process',
+        'Ready': 'Delivery',
+        'Completed': 'Delivery',
+        'Done': 'Delivery'
       };
       
       if (statusMappings[order.current_status]) {
@@ -88,6 +93,18 @@ export const migrateOrderStatuses = async () => {
     
     console.log(`Migration completed. ${migratedCount} orders migrated.`);
     
+    // Verify migration was successful
+    const { data: verifyOrders, error: verifyError } = await supabase
+      .from('orders')
+      .select('current_status')
+      .limit(5);
+    
+         if (!verifyError && verifyOrders) {
+       const oldStatuses = ['Checking', 'Order Received', 'In Progress', 'Final Check', 'Final Inspection', 'Received', 'Processing', 'Ready', 'Completed', 'Done'];
+       const stillNeedsMigration = verifyOrders.some(order => oldStatuses.includes(order.current_status));
+       console.log(`Migration verification: ${stillNeedsMigration ? 'Still needs migration' : 'Migration successful'}`);
+     }
+    
   } catch (error) {
     console.error('Error during status migration:', error);
   }
@@ -98,8 +115,7 @@ export const checkMigrationNeeded = async (): Promise<boolean> => {
   try {
     const { data: orders, error } = await supabase
       .from('orders')
-      .select('current_status')
-      .limit(10);
+      .select('current_status');
     
     if (error) {
       console.error('Error checking migration status:', error);
@@ -111,8 +127,12 @@ export const checkMigrationNeeded = async (): Promise<boolean> => {
     }
     
     // Check if any orders have old status names
-    const oldStatuses = ['Checking', 'Order Received', 'In Progress', 'Final Check', 'Final Inspection'];
-    return orders.some(order => oldStatuses.includes(order.current_status));
+    const oldStatuses = ['Checking', 'Order Received', 'In Progress', 'Final Check', 'Final Inspection', 'Received', 'Processing', 'Ready', 'Completed', 'Done'];
+    const needsMigration = orders.some(order => oldStatuses.includes(order.current_status));
+    
+    console.log(`Migration check: ${orders.length} orders checked, needs migration: ${needsMigration}`);
+    
+    return needsMigration;
     
   } catch (error) {
     console.error('Error checking migration status:', error);

@@ -264,17 +264,19 @@ const OrderDetail: React.FC = () => {
                   </div>
                 )}
                 
-                {order.blouseMaterialCategory && (
+                {/* Service Types (multi) */}
+                {order.serviceTypes && order.serviceTypes.length > 0 && (
                   <div className="flex items-center gap-3">
                     <Package className="w-5 h-5 text-gray-400" />
                     <div>
-                      <p className="text-sm text-gray-500">Service Type</p>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        order.blouseMaterialCategory === 'piping' ? 'bg-purple-100 text-purple-800' : 
-                        'bg-blue-100 text-blue-800'
-                      }`}>
-                        {order.blouseMaterialCategory}
-                      </span>
+                      <p className="text-sm text-gray-500">Service Types</p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {order.serviceTypes.map(type => (
+                          <span key={type} className="px-2 py-1 rounded-full text-xs font-medium bg-pink-100 text-pink-800 border border-pink-200">
+                            {type}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}

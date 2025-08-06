@@ -6,6 +6,7 @@ const MigrationStatus: React.FC = () => {
   const [migrationNeeded, setMigrationNeeded] = useState<boolean | null>(null);
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationComplete, setMigrationComplete] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     checkMigrationStatus();
@@ -15,6 +16,10 @@ const MigrationStatus: React.FC = () => {
     try {
       const needed = await checkMigrationNeeded();
       setMigrationNeeded(needed);
+      // Reset dismissed state when migration is needed
+      if (needed) {
+        setDismissed(false);
+      }
     } catch (error) {
       console.error('Error checking migration status:', error);
     }
@@ -26,6 +31,11 @@ const MigrationStatus: React.FC = () => {
       await migrateOrderStatuses();
       setMigrationComplete(true);
       setMigrationNeeded(false);
+      
+      // Re-check migration status after a delay
+      setTimeout(() => {
+        checkMigrationStatus();
+      }, 2000);
     } catch (error) {
       console.error('Error during migration:', error);
     } finally {
@@ -37,7 +47,7 @@ const MigrationStatus: React.FC = () => {
     return null; // Don't show anything while checking
   }
 
-  if (migrationNeeded) {
+  if (migrationNeeded && !dismissed) {
     return (
       <div className="fixed top-4 right-4 z-50">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 shadow-lg max-w-sm">
@@ -50,20 +60,28 @@ const MigrationStatus: React.FC = () => {
               <p className="text-sm text-yellow-700 mt-1">
                 Some orders need to be updated to use the new status names. This will fix the "two checking" issue.
               </p>
-              <button
-                onClick={handleMigration}
-                disabled={isMigrating}
-                className="mt-3 bg-yellow-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isMigrating ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Updating...
-                  </>
-                ) : (
-                  'Update Now'
-                )}
-              </button>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleMigration}
+                  disabled={isMigrating}
+                  className="bg-yellow-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isMigrating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Now'
+                  )}
+                </button>
+                <button
+                  onClick={() => setDismissed(true)}
+                  className="text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded text-sm font-medium hover:bg-gray-100"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           </div>
         </div>
